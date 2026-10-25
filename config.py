@@ -1,16 +1,25 @@
-import os
+import sys
 from pathlib import Path
 
-# Base Paths
-ROHIT_DIR = Path(__file__).resolve().parent
+# Base Paths (supports both direct python execution and frozen PyInstaller standalone exe)
+if getattr(sys, "frozen", False):
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", sys.executable)).resolve()
+    ROHIT_DIR = Path(sys.executable).resolve().parent
+else:
+    BUNDLE_DIR = Path(__file__).resolve().parent
+    ROHIT_DIR = BUNDLE_DIR
+
 DATA_DIR = ROHIT_DIR / "data"
 STUDENTS_DIR = DATA_DIR / "students"
-MODELS_DIR = ROHIT_DIR / "ai_pipeline" / "models"
+MODELS_DIR = BUNDLE_DIR / "ai_pipeline" / "models"
+if not (MODELS_DIR / "face_detection_yunet_2023mar.onnx").exists():
+    MODELS_DIR = ROHIT_DIR / "ai_pipeline" / "models"
+
 DB_PATH = DATA_DIR / "production_attendance.db"
 PRODUCTION_DB_PATH = DB_PATH
 EMBEDDINGS_PATH = DATA_DIR / "embeddings.json"
 
-# Ensure directories exist
+# Ensure writable directories exist
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 STUDENTS_DIR.mkdir(parents=True, exist_ok=True)
 MODELS_DIR.mkdir(parents=True, exist_ok=True)

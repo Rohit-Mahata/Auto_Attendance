@@ -32,8 +32,11 @@ import cv2
 # Global unverified SSL context for camera streams using self-signed certificates
 SSL_UNVERIFIED_CTX = ssl._create_unverified_context()
 
-# Project root path resolution
-BASE_DIR = Path(__file__).resolve().parent
+# Project root and data path resolution
+if getattr(sys, "frozen", False):
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = BASE_DIR / "data"
 CONFIG_FILE = DATA_DIR / "camera_config.json"
 

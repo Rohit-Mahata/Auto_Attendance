@@ -16,8 +16,15 @@ import cv2
 import numpy as np
 from flask import Flask, jsonify, request, send_from_directory, Response, session
 
-# Add project root to sys.path
-BASE_DIR = Path(__file__).resolve().parent
+# Resolve root and bundle paths (supports standalone PyInstaller exe)
+if getattr(sys, "frozen", False):
+    BUNDLE_DIR = Path(getattr(sys, "_MEIPASS", sys.executable)).resolve()
+    BASE_DIR = Path(sys.executable).resolve().parent
+else:
+    BUNDLE_DIR = Path(__file__).resolve().parent
+    BASE_DIR = BUNDLE_DIR
+
+sys.path.insert(0, str(BUNDLE_DIR))
 sys.path.insert(0, str(BASE_DIR))
 
 from db.database import production_db
@@ -28,7 +35,10 @@ from ai_pipeline.face_detector import FaceDetector
 from ai_pipeline.face_recognizer import FaceRecognizer
 from cctv_stream import ThreadedCCTVStream
 
-STATIC_DIR = BASE_DIR / "ui_app"
+# Serve UI from bundle or local directory
+STATIC_DIR = BUNDLE_DIR / "ui_app"
+if not STATIC_DIR.exists():
+    STATIC_DIR = BASE_DIR / "ui_app"
 PORT = 5055
 
 # Initialize Flask application with secure session handling

@@ -10,9 +10,21 @@ An intelligent, production-ready biometric attendance management system powered 
 
 ---
 
-## ⚡ 1-Click Quickstart (Run on Any Windows PC)
+## ⚡ Instant Standalone Executable (Zero Tools / No Python Needed)
 
-No complicated command-line setups or manual package downloads required. You can share this folder with anyone, and they can start using it immediately:
+You can share the pre-packaged standalone bundle with anyone so they can run the system immediately **without installing Python, OpenCV, or any libraries**:
+
+1. **Share the ZIP file**:
+   - Send `dist/AutoAttendance_Standalone.zip` (located inside `dist/` after building, or download from GitHub releases).
+2. **Double-click `AutoAttendance.exe`**:
+   - Unzip the archive and directly double-click **`AutoAttendance.exe`**.
+   - It runs instantly on any 64-bit Windows machine and opens the web application automatically in their browser!
+
+---
+
+## 🚀 1-Click Quickstart from Source (Developers)
+
+If running from the source code repository:
 
 1. **Clone or Download** this repository onto any PC:
    ```bash
@@ -21,7 +33,10 @@ No complicated command-line setups or manual package downloads required. You can
 2. **Double-click** `Launch_Attendance_App.bat` (or `run.bat`).
    - *The launcher automatically detects Python, installs any missing packages from `requirements.txt`, creates a convenient **Desktop Shortcut**, launches the server, and automatically opens your browser to `http://127.0.0.1:5055/index.html`.*
 
----
+3. **To re-build the standalone `.exe` anytime**:
+   ```bash
+   python build_exe.py
+   ```
 
 ## 🔑 Default Sign-in Credentials
 
