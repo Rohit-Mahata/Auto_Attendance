@@ -63,3 +63,11 @@ ehthumbs_vista.db
 *.tmp
 temp/
 scratch/
+
+# College Project Reports (Private / Local only)
+*.docx
+*.pdf
+report_assets/
+build_full_report.py
+create_report_figures.py
+Auto_Attendance_Major_Project_Report.*
