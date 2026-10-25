@@ -1,0 +1,14 @@
+{
+  "total_samples": 2000,
+  "total_positives": 1332,
+  "total_negatives": 668,
+  "calibrated_optimal": {
+    "T_high": 0.61,
+    "M": 0.02,
+    "N_min": 2,
+    "FAR": 0.0,
+    "FRR": 0.0878,
+    "precision": 1.0,
+    "recall": 0.9122
+  }
+}
