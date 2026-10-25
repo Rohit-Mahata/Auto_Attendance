@@ -472,12 +472,12 @@ class ProductionDatabase:
 
         cur.execute("""
             INSERT OR REPLACE INTO instructors (id, employee_id, name, email, department, role)
-            VALUES (1, 'FAC104', 'Dr. Meera Iyer', 'm.iyer@northfield.edu', 'Computer Science', 'Associate Professor'),
-                   (2, 'FAC102', 'Prof. Rajesh Sharma', 'r.sharma@northfield.edu', 'Computer Science', 'Professor'),
-                   (3, 'FAC108', 'Dr. Ananya Sen', 'a.sen@northfield.edu', 'Computer Science', 'Associate Professor'),
-                   (4, 'FAC111', 'Ms. T. Gurung', 't.gurung@northfield.edu', 'Humanities', 'Assistant Professor'),
-                   (5, 'FAC115', 'Dr. K. P. Adhikari', 'k.adhikari@northfield.edu', 'Computer Science', 'Lecturer'),
-                   (6, 'ADM001', 'Prof. R. Nair', 'r.nair@northfield.edu', 'Computer Science', 'Department Coordinator');
+            VALUES (1, 'FAC104', 'Dr. Meera Iyer', 'm.iyer@agc.edu.in', 'Computer Science', 'Associate Professor'),
+                   (2, 'FAC102', 'Prof. Rajesh Sharma', 'r.sharma@agc.edu.in', 'Computer Science', 'Professor'),
+                   (3, 'FAC108', 'Dr. Ananya Sen', 'a.sen@agc.edu.in', 'Computer Science', 'Associate Professor'),
+                   (4, 'FAC111', 'Ms. T. Gurung', 't.gurung@agc.edu.in', 'Humanities', 'Assistant Professor'),
+                   (5, 'FAC115', 'Dr. K. P. Adhikari', 'k.adhikari@agc.edu.in', 'Computer Science', 'Lecturer'),
+                   (6, 'ADM001', 'Prof. R. Nair', 'r.nair@agc.edu.in', 'Computer Science', 'Department Coordinator');
         """)
 
         cur.execute("""
@@ -624,8 +624,8 @@ class ProductionDatabase:
                 "teacher": student_dict.get("teacher", "Dr. Meera Iyer"),
                 "status": student_dict.get("status", "enrolled"),
                 "enrolled_date": student_dict.get("enrolled_date", now_date),
-                "photo_sample_count": int(student_dict.get("photo_sample_count", 60)),
-                "has_embedding": int(student_dict.get("has_embedding", 1))
+                "photo_sample_count": int(student_dict.get("photo_sample_count", 0)),
+                "has_embedding": int(student_dict.get("has_embedding", 0))
             })
             new_id = cur.lastrowid
             if not new_id:
@@ -1501,7 +1501,7 @@ class ProductionDatabase:
         if not emp_id or not name_clean:
             return False, "Faculty Employee ID and Full Name are required."
 
-        email_clean = email.strip() if email else f"{emp_id.lower()}@northfield.edu"
+        email_clean = email.strip() if email else f"{emp_id.lower()}@agc.edu.in"
         dept_clean = department.strip() if department else "Computer Science"
         role_clean = role.strip() if role else "Assistant Professor"
         pwd_clean = password.strip() if password else "faculty"
@@ -1748,6 +1748,7 @@ class ProductionDatabase:
             if not row:
                 return False, f"Faculty member with ID '{emp_id}' not found."
             int_id = row["id"]
+            name = row["name"]
 
             cur.execute("UPDATE sections SET instructor_id = NULL WHERE instructor_id = ?;", (int_id,))
             cur.execute("UPDATE department_subjects SET assigned_faculty_id = NULL, assigned_faculty_name = 'Unassigned' WHERE assigned_faculty_id = ?;", (emp_id,))

@@ -2,7 +2,7 @@
 Biometric Data Security & Encryption Service
 Implements AES-256 (Fernet) encryption at rest for biometric embeddings,
 registration burst frames, and profile photos.
-Complies with university data protection policies and Nepal Individual Privacy Act 2018.
+Complies with institutional data protection standards.
 """
 
 import os

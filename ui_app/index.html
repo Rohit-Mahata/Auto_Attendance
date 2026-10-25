@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Northfield University — Classroom Attendance Intelligence</title>
+  <title>Amritsar Group of Colleges — Classroom Attendance Intelligence</title>
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -18,11 +18,11 @@
     <!-- ============================================================ -->
     <aside class="app-sidebar">
       <div class="sidebar-top">
-        <div class="univ-brand">
-          <div class="univ-logo-badge">N</div>
+        <div class="univ-brand" style="display: flex; align-items: center; gap: 10px; padding: 10px 12px;">
+          <img src="assets/agc_logo.png" alt="Amritsar Group of Colleges" style="height: 36px; width: auto; background: #ffffff; padding: 3px 6px; border-radius: 6px; object-fit: contain;">
           <div class="univ-brand-text">
-            <div class="brand-title">Northfield University</div>
-            <div class="brand-sub">Attendance Intelligence</div>
+            <div class="brand-title" style="font-size: 13px; font-weight: 800; line-height: 1.2;">Amritsar Group of Colleges</div>
+            <div class="brand-sub" style="font-size: 11px; opacity: 0.85;">Attendance Intelligence</div>
           </div>
         </div>
 
@@ -407,13 +407,13 @@
           </div>
         </div>
 
-        <!-- Rule 1 Alert Banner (Count mismatch alert) -->
+        <!-- Headcount Alert Banner -->
         <div class="alert-banner warning-banner hidden" id="mismatchBanner">
           <div class="banner-icon">⚠️</div>
           <div class="banner-text" id="mismatchBannerText">
-            <strong>Headcount Mismatch Detected:</strong> Total counted persons in room differs from recognized spatial tracks. Not guessing identities.
+            <strong>Headcount Alert:</strong> Counted people in room differs from recognized students.
           </div>
-          <button class="btn-banner-dismiss" onclick="dismissMismatchAlert()">Acknowledge</button>
+          <button class="btn-banner-dismiss" onclick="dismissMismatchAlert()">Dismiss</button>
         </div>
 
         <!-- Main Two-Column Classroom Working Area -->
@@ -435,10 +435,10 @@
 
                 <!-- Camera Source Switcher -->
                 <div class="camera-mode-switcher">
-                  <button class="cam-tab-btn active" id="btnCamWebcam" onclick="setCameraViewMode('webcam')">Laptop Camera (0)</button>
-                  <button class="cam-tab-btn" id="btnCamIPCam" onclick="setCameraViewMode('ipcam')">📱 Android Phone Cam</button>
-                  <button class="cam-tab-btn" id="btnCamCCTV" onclick="setCameraViewMode('cctv')">CCTV RTSP</button>
-                  <button class="cam-tab-btn" onclick="openIpCameraModal()" title="Configure Android Camera IP & Port" style="padding: 6px 10px; font-size: 13px;">⚙️ Setup IP</button>
+                  <button class="cam-tab-btn active" id="btnCamWebcam" onclick="setCameraViewMode('webcam')">Laptop Camera</button>
+                  <button class="cam-tab-btn" id="btnCamIPCam" onclick="setCameraViewMode('ipcam')">📱 Phone Camera</button>
+                  <button class="cam-tab-btn" id="btnCamCCTV" onclick="setCameraViewMode('cctv')">CCTV Camera</button>
+                  <button class="cam-tab-btn" onclick="openIpCameraModal()" title="Configure Camera IP" style="padding: 6px 10px; font-size: 13px;">⚙️ Setup IP</button>
                 </div>
               </div>
 
@@ -448,19 +448,19 @@
                 <!-- Live Video Stream from OpenCV -->
                 <div id="liveVideoBox" class="live-stream-box">
                   <img id="cameraStreamImg" src="" class="live-stream-element" alt="Live Camera Feed">
-                  <div class="stream-overlay-badge" id="streamOverlayBadge">● LIVE · OpenCV YuNet & SFace Recognizer</div>
+                  <div class="stream-overlay-badge" id="streamOverlayBadge">● LIVE Camera Feed</div>
                 </div>
 
               </div>
 
               <!-- How the numbers add up breakdown card -->
               <div class="numbers-breakdown-card" style="margin-top: 16px;">
-                <div class="breakdown-title">HOW THE NUMBERS ADD UP</div>
+                <div class="breakdown-title">ATTENDANCE SUMMARY</div>
                 
                 <div class="breakdown-step">
                   <div class="step-badge">1</div>
                   <div class="step-desc">
-                    <strong>Count everyone first</strong>
+                    <strong>Total Counted</strong>
                     <span class="step-math" id="step1Math">0 enrolled – 0 counted</span>
                   </div>
                   <div class="step-result text-green" id="step1Result">= 0 absent</div>
@@ -469,27 +469,20 @@
                 <div class="breakdown-step">
                   <div class="step-badge">2</div>
                   <div class="step-desc">
-                    <strong>Name the faces</strong>
+                    <strong>Identified Students</strong>
                     <span class="step-math" id="step2Math">0 counted – 0 identified</span>
                   </div>
-                  <div class="step-result text-amber" id="step2Result">= 0 still unclear</div>
+                  <div class="step-result text-amber" id="step2Result">= 0 in review</div>
                 </div>
 
                 <div class="breakdown-step">
                   <div class="step-badge">3</div>
                   <div class="step-desc">
-                    <strong>Check the names left</strong>
+                    <strong>Remaining Unaccounted</strong>
                     <span class="step-math" id="step3Math">0 enrolled – 0 identified</span>
                   </div>
-                  <div class="step-result text-dark" id="step3Result">= 0 names unaccounted</div>
+                  <div class="step-result text-dark" id="step3Result">= 0 unaccounted</div>
                 </div>
-              </div>
-
-              <!-- Interactive Demo Controls -->
-              <div class="demo-rule-controls" style="margin-top: 14px;">
-                <span class="rule-label">Classroom Simulation:</span>
-                <button class="btn-rule" onclick="toggleMismatchRule()">Rule 1: Toggle Count Mismatch</button>
-                <button class="btn-rule" onclick="simulateLateArrival()">Rule 2: Last-Minute Arrival</button>
               </div>
 
             </div>
@@ -569,8 +562,8 @@
 
                 <!-- Review Actions Bottom Strip -->
                 <div class="review-bottom-actions">
-                  <button class="btn-action-secondary" onclick="actionNoneOfThese()">None of these</button>
-                  <button class="btn-action-secondary" onclick="actionSkipTracking()">Skip and keep tracking</button>
+                  <button class="btn-action-secondary" onclick="actionNoneOfThese()">Not Enrolled</button>
+                  <button class="btn-action-secondary" onclick="actionSkipTracking()">Skip</button>
                 </div>
 
               </div>
@@ -807,7 +800,7 @@
 
               <div style="margin-top: 20px;">
                 <button class="btn-action-primary full-width" onclick="executeCustomSessionLaunch()">
-                  ⚡ Set as Active Class & Start Attendance
+                  Start Attendance
                 </button>
               </div>
             </div>
@@ -864,7 +857,7 @@
             <!-- Training Action & Progress Bar -->
             <div class="training-cta-box">
               <button class="btn-train-hero" id="btnStartModelTraining" onclick="triggerModelTraining()">
-                ⚡ BIOMETRIC UPDATE & MODEL SYNC
+                Update Model
               </button>
               
               <div class="train-progress-wrap hidden" id="trainProgressWrap">
@@ -899,10 +892,10 @@
                 </div>
                 <div style="flex: 1; display: flex; gap: 8px;">
                   <button class="btn-action-secondary full-width" onclick="resetPoseCaptureSession()">
-                    🔄 Reset Poses
+                    Reset
                   </button>
                   <button class="btn-action-primary full-width" id="btnAutoGuidedSequence" onclick="startAutoGuidedPoseSequence()">
-                    ▶️ Run 6-Pose Guided Capture (60 Shots)
+                    Start Capture
                   </button>
                 </div>
               </div>
@@ -967,10 +960,10 @@
                   <!-- Manual Trigger & Finalize Buttons -->
                   <div class="pose-action-buttons">
                     <button class="btn-action-secondary" id="btnCaptureCurrentPose" onclick="captureSelectedPoseStep()">
-                      📸 Capture 10 Shots for Selected Pose
+                      Take Photo
                     </button>
                     <button class="btn-action-primary" id="btnFinalizePoseTraining" onclick="finalizeMultiPoseTraining()" disabled>
-                      ⚡ Update Biometric Model
+                      Save Model
                     </button>
                   </div>
 
@@ -1087,12 +1080,12 @@
 
               <!-- Privacy & Consent Notice -->
               <div style="margin-top: 16px; padding: 12px; background: var(--bg-card-subtle); border-radius: 8px; border: 1px solid var(--border-light); font-size: 12px; color: var(--text-muted);">
-                🔒 <strong>Nepal Individual Privacy Act 2018 Compliant:</strong> Biometric facial templates are converted to 128-D mathematical vectors and encrypted using AES-256. Raw facial images are automatically purged after processing.
+                🔒 Biometric facial templates are encrypted using AES-256. Raw photos are automatically cleared after processing.
               </div>
 
               <div style="margin-top: 18px; display: flex; justify-content: flex-end;">
                 <button type="submit" class="btn-action-primary" id="btnSubmitEnrolment" style="padding: 10px 20px;">
-                  🔐 Complete Enrollment & Encrypt to Vault
+                  Save Student
                 </button>
               </div>
             </form>
@@ -1151,10 +1144,10 @@
               <!-- Pose Action Controls -->
               <div style="margin-top: 12px; display: flex; gap: 8px;">
                 <button type="button" class="btn-action-secondary" onclick="captureEnrolPoseStep()" style="flex: 1; font-size: 12.5px;">
-                  📸 Capture 10 Shots for Selected Pose
+                  Take Photo
                 </button>
                 <button type="button" class="btn-action-secondary" onclick="autoCaptureAllPoses()" style="font-size: 12.5px;" title="Automatically capture all 6 poses in sequence">
-                  ⚡ Auto 60-Shot Burst
+                  Auto Capture
                 </button>
               </div>
 
@@ -1330,7 +1323,7 @@
               </div>
 
               <button type="submit" class="btn-action-primary" style="width: 100%; padding: 10px;">
-                + Save & Assign Subject
+                Save Subject
               </button>
             </form>
           </div>
@@ -1372,7 +1365,7 @@
           </div>
           <button class="btn-action-primary" onclick="openAddFacultyModal()" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;">
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-            Add New Faculty Member
+            Add Faculty
           </button>
         </div>
 
@@ -1417,7 +1410,7 @@
               </div>
 
               <button type="submit" class="btn-action-primary" style="width: 100%; padding: 10px;">
-                + Create Class Section
+                Create Section
               </button>
             </form>
 
@@ -1482,7 +1475,7 @@
 
               <div style="margin-top: 16px;">
                 <button type="submit" class="btn-action-primary" style="width: 100%; padding: 10px;">
-                  + Add Timetable Schedule Slot
+                  Add Slot
                 </button>
               </div>
             </form>
@@ -1610,20 +1603,20 @@
 
           <div class="wizard-actions">
             <button class="btn-action-secondary" onclick="closeRegistrationModal()">Cancel</button>
-            <button class="btn-action-primary" onclick="proceedToStep2()">Next: Privacy & Consent →</button>
+            <button class="btn-action-primary" onclick="proceedToStep2()">Next</button>
           </div>
         </div>
 
         <!-- STEP 2: Consent -->
         <div class="wizard-step hidden" id="regStep2">
           <div class="step-title">Step 2 of 5: Biometric Privacy & Consent</div>
-          <div class="step-desc">Compliance standard under the Nepal Individual Privacy Act 2018.</div>
+          <div class="step-desc">Student biometric consent for automated attendance.</div>
           
           <div class="privacy-consent-box">
             <h4>Biometric Data Handling Guarantee</h4>
-            <p>1. Camera snapshots are captured solely for classroom attendance and are hard-purged after 24 hours.</p>
-            <p>2. Enrolment embeddings are irreversibly encrypted with AES-256 in university security vaults.</p>
-            <p>3. Students may choose the roll-call alternative at any time with zero marks penalty.</p>
+            <p>1. Camera snapshots are captured solely for classroom attendance and are cleared after 24 hours.</p>
+            <p>2. Enrolment embeddings are securely encrypted with AES-256.</p>
+            <p>3. Students may choose standard roll-call at any time.</p>
             <div style="margin-top: 14px;">
               <label style="display: flex; gap: 8px; align-items: center; cursor: pointer; font-weight: 600;">
                 <input type="checkbox" id="chkConsentAgreed"> I agree to biometric capture for classroom attendance
@@ -1632,8 +1625,8 @@
           </div>
 
           <div class="wizard-actions">
-            <button class="btn-action-secondary" onclick="optOutStudentAlternative()">Choose Roll Call (Opt out)</button>
-            <button class="btn-action-primary" onclick="proceedToStep3()">Next: Biometric Multi-Pose Studio →</button>
+            <button class="btn-action-secondary" onclick="optOutStudentAlternative()">Opt Out</button>
+            <button class="btn-action-primary" onclick="proceedToStep3()">Next</button>
           </div>
         </div>
 
@@ -1646,7 +1639,7 @@
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
               <span class="meta-txt" id="regPoseStudentLabel">Enrolling: --</span>
               <button class="btn-action-primary" id="btnRegGuidedCapture" onclick="startRegGuidedPoseSequence()" style="font-size: 12px; padding: 6px 14px;">
-                ▶️ Run 6-Pose Guided Capture (60 Shots)
+                Start Capture
               </button>
             </div>
 
@@ -1701,10 +1694,10 @@
 
                 <div style="display: flex; gap: 8px;">
                   <button class="btn-action-secondary full-width" onclick="captureRegCurrentPoseStep()" style="font-size: 12px; padding: 8px;">
-                    📸 Capture 10 Shots
+                    Take Photo
                   </button>
                   <button class="btn-action-primary full-width" id="btnRegFinalizeBiometrics" onclick="proceedToStep4()" disabled style="font-size: 12px; padding: 8px;">
-                    ⚡ Biometric Update →
+                    Next
                   </button>
                 </div>
               </div>
@@ -1740,9 +1733,9 @@
             </div>
 
             <div style="text-align: center;">
-              <button class="btn-action-secondary" onclick="simulateProfileCapture()" style="margin-right: 8px;">📸 Retake Frontal Verification</button>
+              <button class="btn-action-secondary" onclick="simulateProfileCapture()" style="margin-right: 8px;">Retake Photo</button>
               <button class="btn-action-primary" id="btnFinalizeEnrolment" onclick="finalizeStudentEnrolment()">
-                🔐 Finalize & Encrypt into Vault
+                Save Student
               </button>
             </div>
           </div>
@@ -1756,7 +1749,7 @@
             <p class="meta-txt" style="margin: 8px 0 16px 0;">
               Biometric templates are encrypted and active in the SFace recognition gallery for Class CS-3A.
             </p>
-            <button class="btn-action-primary" onclick="closeRegistrationModal()">Done & Return to Dashboard</button>
+            <button class="btn-action-primary" onclick="closeRegistrationModal()">Done</button>
           </div>
         </div>
 
@@ -1780,7 +1773,7 @@
         </div>
 
         <div style="margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
-          <button class="btn-action-secondary" onclick="signOutTeacher()">Sign Out Current Instructor</button>
+          <button class="btn-action-secondary" onclick="signOutTeacher()">Sign Out</button>
           <button class="btn-action-primary" onclick="closeTeacherSwitchModal()">Close</button>
         </div>
       </div>
@@ -1794,8 +1787,8 @@
     <div class="modal-card" style="max-width: 640px; background: #ffffff; color: #182026; border-radius: 12px; box-shadow: 0 25px 50px rgba(0,0,0,0.3); border: 1px solid #d0d7de;">
       <div class="modal-header" style="background: #f6f8fa; padding: 16px 20px; border-bottom: 1px solid #e1e4e8; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <h2 class="modal-title" style="font-size: 16px; font-weight: 700; color: #1f2328; margin: 0;">System Configuration & Policies</h2>
-          <div class="modal-subtitle" style="font-size: 12px; color: #656d76; margin-top: 2px;">CCTV Hardware, SFace AI Confidence & Nepal Privacy Act 2018 Retention</div>
+          <h2 class="modal-title" style="font-size: 16px; font-weight: 700; color: #1f2328; margin: 0;">System Settings</h2>
+          <div class="modal-subtitle" style="font-size: 12px; color: #656d76; margin-top: 2px;">Hardware, Recognition & Storage Settings</div>
         </div>
         <button class="btn-close-modal" onclick="closeSettingsModal()">✕</button>
       </div>
@@ -1840,7 +1833,7 @@
 
         <!-- Attendance Timing Policy -->
         <div style="margin-bottom: 18px;">
-          <h4 style="font-size: 12px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; color: #656d76;">3. Attendance Rules & Cutoffs</h4>
+          <h4 style="font-size: 12px; font-weight: 700; margin-bottom: 8px; text-transform: uppercase; color: #656d76;">3. Attendance Timing Settings</h4>
           <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
             <div class="form-group">
               <label class="form-label">Late Arrival Grace Period (Minutes)</label>
@@ -1859,11 +1852,11 @@
         <div style="padding: 14px; background: #fff5f5; border: 1px solid #fed7d7; border-radius: 8px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <div style="font-weight: 700; font-size: 13px; color: #c53030;">Nepal Individual Privacy Act 2018 Purge</div>
-              <div class="meta-txt" style="color: #742a2a;">Hard-purge temporary unclear face crops older than 24 hours from storage.</div>
+              <div style="font-weight: 700; font-size: 13px; color: #c53030;">Clear Temporary Photos</div>
+              <div class="meta-txt" style="color: #742a2a;">Delete temporary unclear face photos older than 24 hours.</div>
             </div>
             <button class="btn-action-secondary" onclick="triggerPurgeExpiredCrops()" style="color: #c53030; border-color: #feb2b2; font-size: 12px; padding: 6px 12px; white-space: nowrap; background: #ffffff;">
-              Purge Expired Crops
+              Clear Old Photos
             </button>
           </div>
         </div>
@@ -1872,18 +1865,18 @@
         <div style="padding: 14px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; margin-bottom: 16px;">
           <div style="display: flex; justify-content: space-between; align-items: center;">
             <div>
-              <div style="font-weight: 700; font-size: 13px; color: #0f172a;">Danger Zone: Wipe All Records</div>
-              <div class="meta-txt">Wipes in-memory AI embeddings, vault burst frames, and resets database to a fresh clean state.</div>
+              <div style="font-weight: 700; font-size: 13px; color: #0f172a;">Danger Zone: Reset All Data</div>
+              <div class="meta-txt">Resets attendance records and face data to initial setup.</div>
             </div>
             <button class="btn-action-secondary" onclick="triggerResetAllData()" style="color: #dc2626; border-color: #fca5a5; font-size: 12px; padding: 6px 12px; white-space: nowrap; background: #ffffff;">
-              Wipe Database & Biometrics
+              Reset All Data
             </button>
           </div>
         </div>
 
         <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 10px;">
           <button class="btn-action-secondary" onclick="closeSettingsModal()">Cancel</button>
-          <button class="btn-action-primary" onclick="saveSettings()">Save Configuration</button>
+          <button class="btn-action-primary" onclick="saveSettings()">Save Settings</button>
         </div>
       </div>
     </div>
@@ -2034,7 +2027,7 @@
             <button type="button" class="btn-action-secondary" onclick="closeAddFacultyModal()">Cancel</button>
             <button type="submit" class="btn-action-primary" style="display: inline-flex; align-items: center; gap: 6px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              Create Faculty Account
+              Add Faculty
             </button>
           </div>
         </form>
@@ -2048,15 +2041,11 @@
   <div id="loginScreen" class="login-overlay">
     <div class="login-card">
       <div class="login-brand-header">
-        <div class="login-crest-wrap">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-            <path d="M12 8v5"></path>
-            <path d="M9.5 10.5L12 13l2.5-2.5"></path>
-          </svg>
+        <div style="display: flex; justify-content: center; margin-bottom: 12px;">
+          <img src="assets/agc_logo.png" alt="Amritsar Group of Colleges" style="max-height: 60px; max-width: 240px; object-fit: contain;">
         </div>
-        <h2 class="login-brand-title">Northfield University</h2>
-        <div class="login-brand-sub">Classroom Face-Attendance Intelligence & Governance Portal</div>
+        <h2 class="login-brand-title">Amritsar Group of Colleges</h2>
+        <div class="login-brand-sub">Classroom Attendance Portal</div>
       </div>
 
       <div id="loginAlertBox" class="login-alert hidden" style="margin-bottom: 16px; padding: 10px 14px; border-radius: 8px; font-size: 12.5px; background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; display: flex; align-items: center; gap: 8px;">
@@ -2106,13 +2095,13 @@
         </div>
 
         <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
-          Sign In to Portal
+          Sign In
         </button>
       </form>
 
       <div class="login-footer-notice">
         Authorized Academic Personnel Only &bull; Faculty Accounts Managed by HOD<br>
-        Northfield University &bull; Academic Year 2026–2027
+        Amritsar Group of Colleges &bull; Academic Year 2025–2026
       </div>
     </div>
   </div>
@@ -2124,8 +2113,8 @@
     <div class="modal-card" style="max-width: 480px; background: #ffffff; color: #182026; border-radius: 12px; box-shadow: 0 25px 50px rgba(0,0,0,0.3); border: 1px solid #d0d7de;">
       <div class="modal-header" style="background: #f8fafc; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
         <div>
-          <h2 class="modal-title" style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Identity Verification & Security Challenge</h2>
-          <div class="modal-subtitle" style="font-size: 12px; color: #64748b; margin-top: 2px;">Verify identity with academic security challenge questions</div>
+          <h2 class="modal-title" style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Reset Password</h2>
+          <div class="modal-subtitle" style="font-size: 12px; color: #64748b; margin-top: 2px;">Enter your details to reset your password</div>
         </div>
         <button class="btn-close-modal" onclick="closeForgotPasswordModal()">✕</button>
       </div>
@@ -2145,8 +2134,8 @@
 
           <div class="form-group" style="margin-bottom: 12px;">
             <label class="form-label">Security Question 2</label>
-            <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">What is your university security code?</div>
-            <input type="text" class="form-input" id="fpAnswer2" placeholder="Enter university security code" required>
+            <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">What is your college security code?</div>
+            <input type="text" class="form-input" id="fpAnswer2" placeholder="Enter college security code" required>
           </div>
 
           <div class="form-group" style="margin-bottom: 16px;">
@@ -2156,7 +2145,7 @@
 
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
             <button type="button" class="btn-action-secondary" onclick="closeForgotPasswordModal()">Cancel</button>
-            <button type="submit" class="btn-action-primary">Reset Password & Sign In</button>
+            <button type="submit" class="btn-action-primary">Reset Password</button>
           </div>
         </form>
       </div>
@@ -2234,12 +2223,12 @@
 
           <div style="display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 20px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
             <button type="button" class="btn-action-secondary" id="btnTestIpCam" onclick="testIpCameraConnection()" style="display: flex; align-items: center; gap: 6px;">
-              ⚡ Test Connection
+              Test Connection
             </button>
             <div style="display: flex; gap: 8px;">
               <button type="button" class="btn-action-secondary" onclick="closeIpCameraModal()">Cancel</button>
               <button type="submit" class="btn-action-primary" id="btnSaveIpCam" style="background: #15803d;">
-                Connect & Stream Live
+                Connect
               </button>
             </div>
           </div>

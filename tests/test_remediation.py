@@ -1,5 +1,5 @@
 """
-Automated Comprehensive Test Suite: Northfield Attendance Intelligence System
+Automated Comprehensive Test Suite: Amritsar Group of Colleges Attendance System
 Validates all remediated bugs and requirements.
 """
 
@@ -170,9 +170,7 @@ class TestRemediationSuite(unittest.TestCase):
             self.assertIsNotNone(st)
             self.assertEqual(st["has_embedding"], 0)
         finally:
-            with production_db.get_connection() as conn:
-                conn.execute("DELETE FROM students WHERE student_id = ?", (test_sid,))
-                conn.commit()
+            production_db.delete_student(test_sid)
 
     def test_11_correction_request_foreign_key_safety(self):
         """Verifies create_correction_request returns failure when course session does not exist."""
@@ -201,7 +199,7 @@ class TestRemediationSuite(unittest.TestCase):
         payload = {
             "employee_id": new_fac_id,
             "name": "Dr. Automated Test Faculty",
-            "email": "test.faculty@northfield.edu",
+            "email": "test.faculty@agc.edu.in",
             "department": "Computer Science",
             "role": "Associate Professor",
             "password": "testpassword123",
@@ -257,7 +255,7 @@ class TestRemediationSuite(unittest.TestCase):
         self.app.post("/api/hod/faculty/add", json={
             "employee_id": del_fid,
             "name": "Deletable Faculty",
-            "email": "del.fac@northfield.edu",
+            "email": "del.fac@agc.edu.in",
             "department": "Computer Science",
             "role": "Lecturer",
             "password": "tempdelpassword"

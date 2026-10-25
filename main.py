@@ -1,5 +1,5 @@
 """
-Northfield University of Technology — Attendance Intelligence
+Amritsar Group of Colleges — Attendance Intelligence
 Main Entry Point (Web-based Native Experience)
 """
 import sys

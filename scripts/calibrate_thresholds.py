@@ -133,7 +133,7 @@ def generate_synthetic_held_out_dataset(num_samples: int = 1500) -> List[Dict[st
 
 def run_calibration():
     print("=" * 65)
-    print("Northfield University — Biometric Threshold Calibration Engine")
+    print("Amritsar Group of Colleges — Biometric Threshold Calibration Engine")
     print("=" * 65)
 
     dataset = generate_synthetic_held_out_dataset(2000)

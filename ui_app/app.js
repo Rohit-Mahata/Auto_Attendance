@@ -1,5 +1,5 @@
 /**
- * Northfield University of Technology — Attendance Intelligence Client
+ * Amritsar Group of Colleges — Attendance Intelligence Client
  * Production State Engine supporting:
  * - Home dashboard matching instructor timetable flow
  * - Live Laptop Camera (Webcam 0) & CCTV RTSP streaming with YuNet/SFace AI
@@ -2178,7 +2178,7 @@ async function loadStudentCrops(studentId) {
             <div style="font-weight: 700; color: #1e293b; font-size: 13px;">Biometric Feature Template Active</div>
             <div style="font-size: 11.5px; margin-top: 4px; color: #64748b; line-height: 1.45;">
               512-D SFace Embeddings encrypted at rest with AES-256-GCM.<br>
-              Raw camera frames purged per Section 12 of Nepal Individual Privacy Act 2018.
+              Raw camera frames are automatically deleted after processing.
             </div>
           </div>
         `;
@@ -2291,11 +2291,11 @@ window.actionProfileMarkPresent = actionProfileMarkPresent;
 function actionProfileViewHistory() {
   const student = state.rosterData.find(s => s.id === state.activeSelectedRosterId);
   if (!student) return;
-  alert(`Attendance Audit History for ${student.name} (${student.id}):\n\n` +
+  alert(`Attendance History for ${student.name} (${student.id}):\n\n` +
         `• Current Session: ${student.status} (${student.method})\n` +
         `• Registration Status: Enrolled with verified multi-pose biometrics\n` +
-        `• Storage: AES-256 encrypted 128-D templates in vault\n\n` +
-        `Compliance: All verification and override decisions are logged immutably under Nepal Individual Privacy Act 2018.`);
+        `• Storage: AES-256 encrypted templates in secure vault\n\n` +
+        `All verification and override decisions are logged.`);
 }
 window.actionProfileViewHistory = actionProfileViewHistory;
 
@@ -2439,7 +2439,7 @@ function proceedToStep2() {
     year,
     semester,
     division: section,
-    email: email || `${id.toLowerCase()}@northfield.edu`,
+    email: email || `${id.toLowerCase()}@agc.edu.in`,
     phone: phone || "+977-9800000000"
   };
 
@@ -2730,12 +2730,12 @@ async function triggerPurgeExpiredCrops() {
     const res = await fetch(`${API_BASE}/api/retention/purge-expired`, { method: "POST" });
     const data = await res.json();
     if (data.success) {
-      showToast(`Nepal Privacy Act 2018: ${data.purged_count || 0} temporary unclear face crops older than 24h were permanently purged.`, "success");
+      showToast(`${data.purged_count || 0} temporary unclear face photos older than 24h were deleted.`, "success");
     } else {
-      showToast(data.message || "Purged expired face crops", "info");
+      showToast(data.message || "Cleared expired face photos", "info");
     }
   } catch (e) {
-    showToast("Nepal Privacy Act 2018: 24-hour crop purge executed.", "success");
+    showToast("Temporary face photos older than 24 hours deleted.", "success");
   }
 }
 window.triggerPurgeExpiredCrops = triggerPurgeExpiredCrops;
@@ -2747,22 +2747,22 @@ function updateCameraSource(source) {
 window.updateCameraSource = updateCameraSource;
 
 function saveSettings() {
-  showToast("System settings and biometric thresholds updated successfully.", "success");
+  showToast("Settings updated successfully.", "success");
   closeSettingsModal();
 }
 window.saveSettings = saveSettings;
 
-// ================= Simulation & Rule Helpers =================
+// ================= Simulation Helpers =================
 function toggleMismatchRule() {
   state.mismatchActive = !state.mismatchActive;
   const banner = document.getElementById("mismatchBanner");
   if (banner) {
     if (state.mismatchActive) {
       banner.classList.remove("hidden");
-      showToast("Rule 1: Headcount mismatch alert triggered. System prevents auto-guessing.", "info");
+      showToast("Headcount mismatch alert triggered.", "info");
     } else {
       banner.classList.add("hidden");
-      showToast("Mismatch resolved. Spatial tracks equal counted occupancy.", "success");
+      showToast("Mismatch resolved. Counted people equals recognized students.", "success");
     }
   }
 }
@@ -2788,7 +2788,7 @@ function simulateLateArrival() {
     state.absent = Math.max(0, state.absent - 1);
     state.identified += 1;
     state.counted += 1;
-    showToast(`Rule 2: ${absentCandidate.name} detected arriving late at 09:18. Marked Present (Late).`, "info");
+    showToast(`${absentCandidate.name} marked Present (Late).`, "info");
     updateKPIsAndMath();
     initClassroomGrid();
     renderRosterTable(state.activeRosterFilter);
@@ -3460,7 +3460,7 @@ async function handleEnrolmentSubmit(event) {
     division: classSec,
     department: dept,
     semester,
-    email: email || `${id.toLowerCase()}@northfield.edu`
+    email: email || `${id.toLowerCase()}@agc.edu.in`
   };
 
   try {

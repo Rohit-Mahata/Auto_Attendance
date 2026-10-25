@@ -1,5 +1,5 @@
 """
-Northfield University of Technology — Attendance Intelligence System
+Amritsar Group of Colleges — Attendance Intelligence System
 Production Application Server & Native Desktop Bridge
 Serves RESTful APIs, Biometric Pipeline Endpoints, and Static Client Application.
 """
@@ -930,7 +930,7 @@ def api_auth_register():
             cur.execute("""
                 INSERT OR IGNORE INTO instructors (employee_id, name, email, department, is_active)
                 VALUES (?, ?, ?, ?, 1);
-            """, (uid, name, f"{uid.lower()}@northfield.edu", dept))
+            """, (uid, name, f"{uid.lower()}@agc.edu.in", dept))
         conn.commit()
 
     production_db.log_audit(uid, "USER_REGISTER", "users", uid, after=f"Registered {role} account for {name}")
@@ -1229,7 +1229,7 @@ def serve_static(filename):
 def api_health():
     return jsonify({
         "status": "healthy",
-        "service": "Northfield Attendance Intelligence",
+        "service": "Amritsar Group of Colleges Attendance Intelligence",
         "database": "production_attendance.db",
         "model": "SFace-2021dec (Apache 2.0)",
         "security": "AES-256 Biometric Vault Active",
@@ -1352,38 +1352,33 @@ def api_register_student():
                     except Exception:
                         pass
 
-        if not all_vectors:
-            # Generate initial normalized embedding seed if camera burst was skipped
-            seed_vec = np.random.randn(128).astype(np.float32)
-            seed_vec /= np.linalg.norm(seed_vec)
-            all_vectors.append(seed_vec)
+        if all_vectors:
+            # Compute centroid vector
+            stacked = np.vstack(all_vectors)
+            centroid = np.mean(stacked, axis=0)
+            norm = np.linalg.norm(centroid)
+            if norm > 1e-6:
+                centroid = centroid / norm
+            centroid = centroid.astype(np.float32)
 
-        # Compute centroid vector
-        stacked = np.vstack(all_vectors)
-        centroid = np.mean(stacked, axis=0)
-        norm = np.linalg.norm(centroid)
-        if norm > 1e-6:
-            centroid = centroid / norm
-        centroid = centroid.astype(np.float32)
+            # Register in recognizer
+            ai_recognizer.student_embeddings[sid] = centroid
+            ai_recognizer.save_enrolled_embeddings()
 
-        # Register in recognizer
-        ai_recognizer.student_embeddings[sid] = centroid
-        ai_recognizer.save_enrolled_embeddings()
-
-        # Encrypt into vault database
-        enc = security_engine.encrypt_embedding(centroid)
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with production_db.get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT OR REPLACE INTO face_templates (
-                    student_id, embedding_encrypted, model_version, source,
-                    quality, pose_group, status, created_at
-                ) VALUES (?, ?, 'SFace-2021dec', 'enrolment', 0.95, 'multi_pose', 'active', ?);
-            """, (new_id, enc, now_str))
-            cur.execute("UPDATE students SET has_embedding = 1, photo_sample_count = ? WHERE id = ?;",
-                        (max(60, len(all_vectors)), new_id))
-            conn.commit()
+            # Encrypt into vault database
+            enc = security_engine.encrypt_embedding(centroid)
+            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with production_db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT OR REPLACE INTO face_templates (
+                        student_id, embedding_encrypted, model_version, source,
+                        quality, pose_group, status, created_at
+                    ) VALUES (?, ?, 'SFace-2021dec', 'enrolment', 0.95, 'multi_pose', 'active', ?);
+                """, (new_id, enc, now_str))
+                cur.execute("UPDATE students SET has_embedding = 1, photo_sample_count = ? WHERE id = ?;",
+                            (max(60, len(all_vectors)), new_id))
+                conn.commit()
 
         if sid in pose_capture_sessions:
             del pose_capture_sessions[sid]
@@ -1535,7 +1530,7 @@ def api_test_reset():
 # ================= Server Execution =================
 def launch():
     app_url = f"http://127.0.0.1:{PORT}/index.html"
-    print(f"[Northfield Attendance] Flask Production Engine active at: {app_url}")
+    print(f"[AGC Attendance] Flask Production Engine active at: {app_url}")
 
     import logging
     log = logging.getLogger('werkzeug')

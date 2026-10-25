@@ -530,7 +530,7 @@ def run_cli_preview(ip, port, path, custom_url=""):
     real-time FPS, and basic face detection for verification.
     """
     print("\n" + "=" * 60)
-    print("  NORTHFIELD UNIVERSITY — ANDROID IP CAMERA TESTER")
+    print("  AMRITSAR GROUP OF COLLEGES — ANDROID IP CAMERA TESTER")
     print("=" * 60)
 
     url = custom_url.strip() if custom_url else build_ip_camera_url(ip, port, path)
@@ -608,7 +608,7 @@ def run_cli_preview(ip, port, path, custom_url=""):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Android IP Camera Stream Client for Northfield University")
+    parser = argparse.ArgumentParser(description="Android IP Camera Stream Client for Amritsar Group of Colleges")
     parser.add_argument("--ip", type=str, default="", help="Android phone IP address (e.g. 192.168.1.15)")
     parser.add_argument("--port", type=int, default=8080, help="Stream port (default: 8080)")
     parser.add_argument("--path", type=str, default="/video", help="Stream path (default: /video)")
