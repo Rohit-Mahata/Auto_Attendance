@@ -1846,7 +1846,6 @@ class ProductionDatabase:
             int_id = row["id"]
 
             cur.execute("UPDATE sections SET instructor_id = NULL WHERE instructor_id = ?;", (int_id,))
-            cur.execute("UPDATE sessions SET instructor_id = NULL WHERE instructor_id = ?;", (int_id,))
             cur.execute("UPDATE department_subjects SET assigned_faculty_id = NULL, assigned_faculty_name = 'Unassigned' WHERE assigned_faculty_id = ?;", (emp_id,))
             cur.execute("DELETE FROM timetable_entries WHERE faculty_id = ?;", (emp_id,))
             cur.execute("DELETE FROM users WHERE LOWER(user_id) = LOWER(?);", (emp_id,))
