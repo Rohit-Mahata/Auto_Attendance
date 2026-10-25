@@ -1529,13 +1529,6 @@ def api_test_reset():
 
     return jsonify({"success": success, "message": msg})
 
-@flask_app.route("/api/test/seed-synthetic", methods=["POST"])
-def api_test_seed_synthetic():
-    """Test utility: Seeds standard 60-student CS-3A section with active session 14."""
-    data = request.get_json(silent=True) or {}
-    actor = data.get("actor", "Admin")
-    success, msg = production_db.seed_synthetic_test_section(actor)
-    return jsonify({"success": success, "message": msg})
 
 
 

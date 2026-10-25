@@ -1321,21 +1321,6 @@ async function triggerResetAllData() {
 }
 window.triggerResetAllData = triggerResetAllData;
 
-async function triggerSeedSyntheticData() {
-  try {
-    const res = await fetch(`${API_BASE}/api/test/seed-synthetic`, { method: "POST" });
-    const data = await res.json();
-    if (data.success) {
-      showToast("Loaded Section CS-3A: 60 students and active session 14 populated.", "success");
-      await loadInitialData();
-    } else {
-      showToast(data.message || "Failed to seed synthetic section", "error");
-    }
-  } catch (e) {
-    showToast("Error connecting to server to seed section", "error");
-  }
-}
-window.triggerSeedSyntheticData = triggerSeedSyntheticData;
 
 // ================= Classroom Grid Generation =================
 function initClassroomGrid() {

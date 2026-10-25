@@ -124,7 +124,7 @@ Auto_Attendance/
 ├── app.py                      # Flask REST API and live recognition controller
 ├── ip_camera_stream.py         # Android IP Camera streaming engine & TCP checker
 ├── cctv_stream.py              # CCTV stream ingestion wrapper
-├── db_engine.py                # Database helper interface
+├── build_exe.py                # Standalone Windows executable packager
 ├── ai_pipeline/                # Deep learning face detection & recognition
 │   ├── face_detector.py        # YuNet detector implementation
 │   ├── face_recognizer.py      # SFace embedding extractor & matcher

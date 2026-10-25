@@ -1249,22 +1249,6 @@ class ProductionDatabase:
             conn.execute("PRAGMA foreign_keys = ON;")
             conn.commit()
 
-        # Also wipe any legacy classroom_attendance.db records
-        legacy_db = DATA_DIR / "classroom_attendance.db"
-        if legacy_db.exists():
-            try:
-                import sqlite3
-                with sqlite3.connect(str(legacy_db)) as l_conn:
-                    l_cur = l_conn.cursor()
-                    for tbl in ["students", "attendance_logs"]:
-                        try:
-                            l_cur.execute(f"DELETE FROM {tbl};")
-                        except Exception:
-                            pass
-                    l_conn.commit()
-            except Exception:
-                pass
-
         # Wipe embeddings.json file so camera never matches deleted students
         emb_file = EMBEDDINGS_PATH
         try:
@@ -1285,86 +1269,6 @@ class ProductionDatabase:
 
         self.log_audit(actor, "RESET_ALL_DATA", "database", "all", after="Database wiped to pristine empty state")
         return True, "All students, biometric templates, and sessions cleared. System reset to clean production state."
-
-    def seed_synthetic_test_section(self, actor: str = "Admin") -> Tuple[bool, str]:
-        """Seeds standard synthetic 60-student CS-3A section with active session for immediate end-to-end testing."""
-        self.reset_all_data(actor)
-        now_date = datetime.now().strftime("%Y-%m-%d")
-        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        # 60 Synthetic Students with guaranteed unique IDs
-        base_names = [
-            ("22CS1047", "Aarav Sharma", "enrolled"),
-            ("22CS1031", "Riya Kapoor", "enrolled"),
-            ("22CS1018", "Nisha Thapa", "enrolled"),
-            ("22CS1052", "Harpreet Singh", "enrolled"),
-            ("22CS1038", "Karan Mehta", "enrolled"),
-            ("22CS1044", "Simran Kaur", "enrolled"),
-            ("22CS1051", "Fatima Noor", "enrolled"),
-            ("22CS1056", "Joel Mathew", "opted_out"),
-            ("22CS1063", "Tanvir Rahman", "enrolled"),
-            ("22CS1007", "Anjali Gurung", "enrolled"),
-            ("22CS1012", "Bikram Thapa", "pending"),
-            ("22CS1029", "Imran Sheikh", "needs_new_photo"),
-            ("22CS1033", "Kavya Reddy", "opted_out"),
-            ("22CS1040", "Pooja Rana", "enrolled"),
-            ("22CS1058", "Lakshya Bist", "enrolled"),
-            ("22CS1059", "Dev Patel", "enrolled"),
-        ]
-        used_sids = {s[0] for s in base_names}
-        names = list(base_names)
-        counter = 1
-        while len(names) < 60:
-            candidate_sid = f"22CS1{counter:03d}"
-            if candidate_sid not in used_sids:
-                used_sids.add(candidate_sid)
-                names.append((candidate_sid, f"Student {len(names)+1:02d}", "enrolled"))
-            counter += 1
-
-        with self.get_connection() as conn:
-            cur = conn.cursor()
-            # Ensure Section 1 exists
-            cur.execute("""
-                INSERT OR IGNORE INTO sessions (id, section_id, room_id, camera_id, start_time, end_time, state)
-                VALUES (14, 1, 1, 1, '09:00:00', '10:00:00', 'in_review');
-            """)
-
-            for idx, (sid, sname, status) in enumerate(names, start=1):
-                cur.execute("""
-                    INSERT OR REPLACE INTO students (
-                        id, student_id, roll_no, name, department, course, year, semester,
-                        division, gender, email, phone, status, enrolled_date,
-                        photo_sample_count, has_embedding
-                    ) VALUES (
-                        ?, ?, ?, ?, 'Computer Science', 'B.Tech', '2024-25', '7th Semester',
-                        'CS-3A', 'Male', ?, '+977-9800000000', ?, ?, 64, ?
-                    );
-                """, (idx, sid, f"2333{100+idx}", sname, f"{sid.lower()}@northfield.edu",
-                      status, now_date, 1 if status == 'enrolled' else 0))
-
-                cur.execute("""
-                    INSERT INTO enrolments (student_id, section_id, enrolled_at)
-                    VALUES (?, 1, ?);
-                """, (idx, now_str))
-
-                if status == 'enrolled':
-                    # Create synthetic 128-D template
-                    dummy_vec = np.random.randn(128).astype(np.float32)
-                    dummy_vec /= np.linalg.norm(dummy_vec)
-                    enc_vec = security_engine.encrypt_embedding(dummy_vec)
-                    cur.execute("""
-                        INSERT INTO face_templates (
-                            student_id, embedding_encrypted, model_version, source,
-                            quality, pose_group, status, created_at
-                        ) VALUES (?, ?, 'SFace-2021dec', 'enrolment', 0.88, 'front', 'active', ?);
-                    """, (idx, enc_vec, now_str))
-
-            # Ensure clean empty corrections queue on synthetic seed
-            cur.execute("DELETE FROM corrections WHERE session_id = 14;")
-            conn.commit()
-
-        self.log_audit(actor, "SEED_SYNTHETIC_SECTION", "sections", "CS-3A", after="Seeded 60 test students with active session 14")
-        return True, "Loaded Section CS-3A: 60 students enrolled, active session #14 with 50 counted and 6 in review."
 
     # ================= Timetable & Session Management =================
     def get_weekly_timetable(self, instructor_name: Optional[str] = None, class_code: Optional[str] = None) -> Dict[str, List[Dict[str, Any]]]:
