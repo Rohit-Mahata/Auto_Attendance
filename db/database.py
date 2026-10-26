@@ -460,106 +460,12 @@ class ProductionDatabase:
             VALUES ('v1.0', ?, 'System Configuration', '2026-10-23 00:00:00', 1);
         """, (json.dumps(threshold_v1),))
 
-        # Core Academic Setup
+        # Default Administrator / HOD account
         cur.execute("""
-            INSERT OR IGNORE INTO courses (id, code, name, department, credits)
-            VALUES (1, 'CS-2104', 'Data Structures', 'Computer Science', 4),
-                   (2, 'MA-2101', 'Discrete Mathematics', 'Applied Sciences', 4),
-                   (3, 'CS-2106', 'Computer Organisation', 'Computer Science', 3),
-                   (4, 'HS-2102', 'Technical Writing', 'Humanities', 2),
-                   (5, 'CS-2108', 'Data Structures Lab', 'Computer Science', 2);
-        """)
-
-        cur.execute("""
-            INSERT OR REPLACE INTO instructors (id, employee_id, name, email, department, role)
-            VALUES (1, 'FAC104', 'Dr. Meera Iyer', 'm.iyer@agc.edu.in', 'Computer Science', 'Associate Professor'),
-                   (2, 'FAC102', 'Prof. Rajesh Sharma', 'r.sharma@agc.edu.in', 'Computer Science', 'Professor'),
-                   (3, 'FAC108', 'Dr. Ananya Sen', 'a.sen@agc.edu.in', 'Computer Science', 'Associate Professor'),
-                   (4, 'FAC111', 'Ms. T. Gurung', 't.gurung@agc.edu.in', 'Humanities', 'Assistant Professor'),
-                   (5, 'FAC115', 'Dr. K. P. Adhikari', 'k.adhikari@agc.edu.in', 'Computer Science', 'Lecturer'),
-                   (6, 'ADM001', 'Prof. R. Nair', 'r.nair@agc.edu.in', 'Computer Science', 'Department Coordinator');
-        """)
-
-        cur.execute("""
-            INSERT OR IGNORE INTO rooms (id, room_code, building, capacity, rows_count, cols_count)
-            VALUES (1, 'B-Lab 3', 'Block B', 60, 5, 10),
-                   (2, 'B-Lab 2', 'Block B', 60, 5, 10),
-                   (3, 'B-204', 'Block B', 60, 5, 10),
-                   (4, 'B-105', 'Block B', 60, 5, 10),
-                   (5, 'A-301', 'Block A', 60, 5, 10);
-        """)
-
-        cur.execute("""
-            INSERT OR IGNORE INTO sections (id, course_id, section_code, room_id, instructor_id, term)
-            VALUES (1, 1, 'CS-3A', 1, 1, 'Autumn 2026'),
-                   (2, 2, 'CS-3A', 3, 2, 'Autumn 2026'),
-                   (3, 3, 'CS-3A', 4, 3, 'Autumn 2026'),
-                   (4, 4, 'CS-3A', 5, 4, 'Autumn 2026'),
-                   (5, 5, 'CS-3A', 2, 5, 'Autumn 2026');
-        """)
-
-        cur.execute("""
-            INSERT OR IGNORE INTO cameras (id, room_id, name, rtsp_url, status, last_seen, notes)
-            VALUES (1, 1, 'B-Lab 3 · front', 'rtsp://10.20.4.101:554/live', 'online', '2026-10-23 09:08:40', 'Back row lighting dim'),
-                   (2, 2, 'B-Lab 2 · front', 'rtsp://10.20.4.102:554/live', 'online', '2026-10-23 09:08:40', 'Nominal'),
-                   (3, 3, 'B-204 · front', 'rtsp://10.20.4.103:554/live', 'offline', '2026-10-23 09:41:00', 'Roll call used for MA-2101'),
-                   (4, 4, 'B-105 · front', 'rtsp://10.20.4.104:554/live', 'online', '2026-10-23 09:08:40', 'Nominal'),
-                   (5, 5, 'A-301 · front', 'rtsp://10.20.4.105:554/live', 'online', '2026-10-23 09:08:40', 'Nominal');
-        """)
-
-        # 23. Seed User Accounts (HOD & Faculty with unique Security Questions)
-        cur.execute("""
-            INSERT OR REPLACE INTO users (user_id, name, role, password, department, sec_q1, sec_a1, sec_q2, sec_a2)
-            VALUES ('HOD01', 'Dr. Ramesh Adhikari (HOD)', 'hod', 'admin', 'Computer Science',
+            INSERT OR IGNORE INTO users (user_id, name, role, password, department, sec_q1, sec_a1, sec_q2, sec_a2)
+            VALUES ('HOD01', 'Head of Department', 'hod', 'admin', 'Computer Science',
                     'What is your primary academic department?', 'Computer Science',
-                    'What is the university campus administrative block?', 'Block A'),
-                   ('FAC104', 'Dr. Meera Iyer', 'faculty', 'faculty', 'Computer Science',
-                    'What is your primary research laboratory?', 'Lab 3',
-                    'What is your employee badge serial suffix?', '104'),
-                   ('FAC102', 'Prof. Rajesh Sharma', 'faculty', 'faculty', 'Computer Science',
-                    'What is your assigned lecture hall?', 'Room B-204',
-                    'What is your primary subject code?', 'CS-3102'),
-                   ('FAC108', 'Dr. Ananya Sen', 'faculty', 'faculty', 'Computer Science',
-                    'What is your specialized academic domain?', 'Database Systems',
-                    'What is your assigned lecture hall?', 'Room A-301'),
-                   ('FAC115', 'Dr. K. P. Adhikari', 'faculty', 'faculty', 'Computer Science',
-                    'What is your assigned lecture hall?', 'Room B-105',
-                    'What is your primary subject code?', 'CS-2106');
-        """)
-
-        # 24. Seed Department Subjects
-        cur.execute("""
-            INSERT OR IGNORE INTO department_subjects (code, name, department, credits, assigned_faculty_id, assigned_faculty_name, room)
-            VALUES ('CS-2104', 'Data Structures', 'Computer Science', 4, 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 3'),
-                   ('CS-3102', 'Algorithms', 'Computer Science', 4, 'FAC102', 'Prof. Rajesh Sharma', 'Room B-204'),
-                   ('CS-2210', 'Database Systems', 'Computer Science', 4, 'FAC108', 'Dr. Ananya Sen', 'Room A-301'),
-                   ('CS-2106', 'Computer Organisation', 'Computer Science', 3, 'FAC115', 'Dr. K. P. Adhikari', 'Room B-105'),
-                   ('DS-101', 'Data Science', 'Computer Science', 3, 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 2');
-        """)
-
-        # 25. Seed Department Classes
-        cur.execute("""
-            INSERT OR IGNORE INTO department_classes (class_code, department, semester, enrolled_count)
-            VALUES ('CS-3A', 'Computer Science', '5th Semester', 60),
-                   ('CS-3B', 'Computer Science', '5th Semester', 55),
-                   ('CSE1', 'Computer Science', '3rd Semester', 50);
-        """)
-
-        # 26. Seed Timetable Schedule Entries
-        cur.execute("""
-            INSERT OR IGNORE INTO timetable_entries (id, class_code, day, time_slot, subject_code, subject_name, faculty_id, faculty_name, room)
-            VALUES (1, 'CS-3A', 'Monday', '09:00 – 10:00', 'CS-2104', 'Data Structures', 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 3'),
-                   (2, 'CSE1', 'Monday', '09:50 – 10:40', 'DS-101', 'Data Science', 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 2'),
-                   (3, 'CSE1', 'Monday', '10:45 – 11:35', 'CS-3102', 'Algorithms', 'FAC102', 'Prof. Rajesh Sharma', 'Room B-204'),
-                   (4, 'CS-3A', 'Monday', '10:15 – 11:15', 'CS-3102', 'Algorithms', 'FAC102', 'Prof. Rajesh Sharma', 'Room B-204'),
-                   (5, 'CSE1', 'Tuesday', '09:50 – 10:40', 'DS-101', 'Data Science', 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 2'),
-                   (6, 'CS-3A', 'Tuesday', '09:00 – 10:00', 'CS-3102', 'Algorithms', 'FAC102', 'Prof. Rajesh Sharma', 'Room B-204'),
-                   (7, 'CSE1', 'Wednesday', '09:50 – 10:40', 'CS-2210', 'Database Systems', 'FAC108', 'Dr. Ananya Sen', 'Room A-301'),
-                   (8, 'CS-3A', 'Wednesday', '09:00 – 10:00', 'CS-2210', 'Database Systems', 'FAC108', 'Dr. Ananya Sen', 'Room A-301'),
-                   (9, 'CSE1', 'Thursday', '09:50 – 10:40', 'DS-101', 'Data Science', 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 2'),
-                   (10, 'CS-3A', 'Thursday', '09:00 – 10:00', 'CS-2104', 'Data Structures', 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 3'),
-                   (11, 'CSE1', 'Friday', '09:50 – 10:40', 'CS-2106', 'Computer Organisation', 'FAC115', 'Dr. K. P. Adhikari', 'Room B-105'),
-                   (12, 'CS-3A', 'Friday', '09:00 – 10:00', 'CS-2104', 'Data Structures', 'FAC104', 'Dr. Meera Iyer', 'Block B, Lab 3');
+                    'What is your college security code?', '1234');
         """)
 
         conn.commit()
@@ -621,7 +527,7 @@ class ProductionDatabase:
                 "email": student_dict.get("email", ""),
                 "phone": student_dict.get("phone", ""),
                 "address": student_dict.get("address", ""),
-                "teacher": student_dict.get("teacher", "Dr. Meera Iyer"),
+                "teacher": student_dict.get("teacher", ""),
                 "status": student_dict.get("status", "enrolled"),
                 "enrolled_date": student_dict.get("enrolled_date", now_date),
                 "photo_sample_count": int(student_dict.get("photo_sample_count", 0)),
@@ -633,15 +539,16 @@ class ProductionDatabase:
                 row = cur.fetchone()
                 new_id = row[0] if row else 1
 
-            # Auto-enroll in active section
-            div_code = student_dict.get("division", "CS-3A")
-            cur.execute("SELECT id FROM sections WHERE section_code = ? LIMIT 1;", (div_code,))
-            s_row = cur.fetchone()
-            sec_id = s_row[0] if s_row else 1
-            cur.execute("""
-                INSERT OR IGNORE INTO enrolments (student_id, section_id, enrolled_at)
-                VALUES (?, ?, ?);
-            """, (new_id, sec_id, now_date))
+            # Auto-enroll in active section if section exists
+            div_code = student_dict.get("division", "")
+            if div_code:
+                cur.execute("SELECT id FROM sections WHERE section_code = ? LIMIT 1;", (div_code,))
+                s_row = cur.fetchone()
+                if s_row:
+                    cur.execute("""
+                        INSERT OR IGNORE INTO enrolments (student_id, section_id, enrolled_at)
+                        VALUES (?, ?, ?);
+                    """, (new_id, s_row[0], now_date))
 
             conn.commit()
 
@@ -764,7 +671,6 @@ class ProductionDatabase:
                 SELECT student_id, name, roll_no, status, department
                 FROM students
                 WHERE status IN ('needs_new_photo', 'pending')
-                   OR student_id IN ('22CS1063', '22CS1007', '22CS1029', '22CS1040', '22CS1058')
                 ORDER BY student_id ASC;
             """)
             below_75 = [dict(r) for r in cur.fetchall()]
@@ -777,7 +683,7 @@ class ProductionDatabase:
             "below_75": below_75
         }
 
-    def override_student_attendance(self, student_id: str, new_status: str, actor: str = "Dr. Meera Iyer", session_id: Optional[int] = None) -> Tuple[bool, str]:
+    def override_student_attendance(self, student_id: str, new_status: str, actor: str = "Faculty", session_id: Optional[int] = None) -> Tuple[bool, str]:
         student = self.get_student_by_id(student_id)
         if not student:
             return False, f"Student {student_id} not found."
@@ -795,10 +701,27 @@ class ProductionDatabase:
                 if sess_row:
                     target_session_id = sess_row[0]
                 else:
+                    cur.execute("SELECT id FROM sections LIMIT 1;")
+                    sec_r = cur.fetchone()
+                    if not sec_r:
+                        cur.execute("INSERT OR IGNORE INTO courses (code, name, department) VALUES ('GEN-101', 'General Studies', 'General');")
+                        cur.execute("SELECT id FROM courses WHERE code = 'GEN-101';")
+                        c_id = cur.fetchone()[0]
+                        cur.execute("INSERT OR IGNORE INTO rooms (room_code, building) VALUES ('Room-101', 'Main');")
+                        cur.execute("SELECT id FROM rooms WHERE room_code = 'Room-101';")
+                        r_id = cur.fetchone()[0]
+                        cur.execute("INSERT INTO sections (course_id, section_code, room_id) VALUES (?, 'General', ?);", (c_id, r_id))
+                        sec_id = cur.lastrowid
+                    else:
+                        sec_id = sec_r[0]
+                        cur.execute("SELECT id FROM rooms LIMIT 1;")
+                        r_row = cur.fetchone()
+                        r_id = r_row[0] if r_row else None
+
                     cur.execute("""
                         INSERT INTO sessions (section_id, room_id, camera_id, start_time, end_time, state)
-                        VALUES (1, 1, 1, '09:00:00', '10:00:00', 'in_review');
-                    """)
+                        VALUES (?, ?, NULL, '09:00:00', '10:00:00', 'in_review');
+                    """, (sec_id, r_id))
                     target_session_id = cur.lastrowid
 
             cur.execute("""
@@ -904,7 +827,7 @@ class ProductionDatabase:
             return purged_count
 
     # ================= Idempotent Session Submission =================
-    def submit_attendance_session(self, session_id: int, submitted_by: str = "Dr. Meera Iyer") -> Tuple[bool, str]:
+    def submit_attendance_session(self, session_id: int, submitted_by: str = "Faculty") -> Tuple[bool, str]:
         """
         Submits attendance for a session in a single atomic transaction.
         Enforces:
@@ -940,7 +863,7 @@ class ProductionDatabase:
             self.log_audit(submitted_by, "SUBMIT_SESSION_ATTENDANCE", "sessions", str(session_id), after="submitted")
             return True, f"Session {session_id} submitted successfully."
 
-    def save_attendance_records(self, session_id: int, records: list, actor: str = "Dr. Meera Iyer") -> Tuple[bool, str]:
+    def save_attendance_records(self, session_id: int, records: list, actor: str = "Faculty") -> Tuple[bool, str]:
         """
         Saves full attendance list with present/absent status for every student in session.
         Inserts/updates attendance_records and student_subject_attendance tables.
@@ -958,10 +881,27 @@ class ProductionDatabase:
             s_row = cur.fetchone()
             course_id = 1
             if not s_row:
+                cur.execute("SELECT id FROM sections LIMIT 1;")
+                sec_r = cur.fetchone()
+                if not sec_r:
+                    cur.execute("INSERT OR IGNORE INTO courses (code, name, department) VALUES ('GEN-101', 'General Studies', 'General');")
+                    cur.execute("SELECT id FROM courses WHERE code = 'GEN-101';")
+                    c_id = cur.fetchone()[0]
+                    cur.execute("INSERT OR IGNORE INTO rooms (room_code, building) VALUES ('Room-101', 'Main');")
+                    cur.execute("SELECT id FROM rooms WHERE room_code = 'Room-101';")
+                    r_id = cur.fetchone()[0]
+                    cur.execute("INSERT INTO sections (course_id, section_code, room_id) VALUES (?, 'General', ?);", (c_id, r_id))
+                    sec_id = cur.lastrowid
+                else:
+                    sec_id = sec_r[0]
+                    cur.execute("SELECT id FROM rooms LIMIT 1;")
+                    r_row = cur.fetchone()
+                    r_id = r_row[0] if r_row else None
+
                 cur.execute("""
                     INSERT INTO sessions (id, section_id, room_id, start_time, end_time, state)
-                    VALUES (?, 1, 1, ?, ?, 'submitted');
-                """, (session_id, now_str, now_str))
+                    VALUES (?, ?, ?, ?, ?, 'submitted');
+                """, (session_id, sec_id, r_id, now_str, now_str))
             else:
                 course_id = s_row["course_id"] or 1
 
@@ -1302,18 +1242,9 @@ class ProductionDatabase:
                         "students": 60,
                         "status": "upcoming"
                     })
-
-        # If empty or not yet filled, fallback to standard schedule
-        has_items = any(len(items) > 0 for items in result.values())
-        if not has_items:
-            result["Monday"].append({"slot": "09:00 – 10:00", "code": "CS-2104", "course": "Data Structures", "section": "CS-3A", "room": "Block B, Lab 3", "instructor": instructor_name or "Dr. Meera Iyer", "students": 60, "status": "active"})
-            result["Monday"].append({"slot": "09:50 – 10:40", "code": "DS-101", "course": "Data Science", "section": "CSE1", "room": "Block B, Lab 2", "instructor": instructor_name or "Dr. Meera Iyer", "students": 50, "status": "upcoming"})
-            result["Tuesday"].append({"slot": "09:50 – 10:40", "code": "DS-101", "course": "Data Science", "section": "CSE1", "room": "Block B, Lab 2", "instructor": instructor_name or "Dr. Meera Iyer", "students": 50, "status": "active"})
-            result["Wednesday"].append({"slot": "09:50 – 10:40", "code": "CS-2210", "course": "Database Systems", "section": "CSE1", "room": "Room A-301", "instructor": instructor_name or "Dr. Ananya Sen", "students": 48, "status": "active"})
-
         return result
 
-    def set_active_class_session(self, course_code: str, course_name: str, room_code: str, time_slot: str, section_code: str = "CS-3A", actor: str = "Dr. Meera Iyer") -> Tuple[bool, str, Dict[str, Any]]:
+    def set_active_class_session(self, course_code: str, course_name: str, room_code: str, time_slot: str, section_code: str = "", actor: str = "Faculty") -> Tuple[bool, str, Dict[str, Any]]:
         """Sets the selected timetable slot as the active live attendance session."""
         parts = time_slot.replace("–", "-").split("-")
         start_t = (parts[0].strip() + ":00")[:8]

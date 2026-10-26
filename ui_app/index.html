@@ -119,10 +119,10 @@
 
       <!-- Sidebar User Profile -->
       <div class="sidebar-profile">
-        <div class="profile-avatar-circle" id="sidebarAvatarCircle">MI</div>
+        <div class="profile-avatar-circle" id="sidebarAvatarCircle">--</div>
         <div class="profile-user-info">
-          <div class="profile-user-name" id="facultyProfileName">Dr. Meera Iyer</div>
-          <div class="profile-user-role" id="facultyProfileRole">Faculty · Computer Science</div>
+          <div class="profile-user-name" id="facultyProfileName">--</div>
+          <div class="profile-user-role" id="facultyProfileRole">Faculty</div>
         </div>
       </div>
     </aside>
@@ -174,91 +174,11 @@
             <div class="section-micro-heading">YOUR DAY</div>
             
             <div class="day-schedule-list" id="homeScheduleCardsList">
-              <!-- Dynamically populated or rendered -->
-              <div class="class-schedule-card active-card" onclick="selectClassAndLaunch('CS-2104', 'Data Structures', 'Block B, Lab 3', '09:00 – 10:00', 'CS-3A')">
-                <div class="class-time-block">
-                  <div class="time-main">09:00</div>
-                  <div class="time-sub">to 10:00</div>
-                </div>
-                <div class="class-info-block">
-                  <div class="class-title-row">
-                    <span class="course-color-bar" style="background: #1d734d;"></span>
-                    <strong class="course-title">Data Structures</strong>
-                    <span class="card-status-badge badge-active">Active now · open until 09:30</span>
-                  </div>
-                  <div class="class-details-txt">CS-2104 · B.Tech Computer Science, Year 3, Section A · Room B-Lab 3 · 60 students</div>
-                  <div class="class-progress-txt" id="card1Progress">44 identified · 6 to review</div>
-                </div>
-                <div class="class-action-block">
-                  <button class="btn-action-primary" onclick="event.stopPropagation(); switchView('classroomView');">
-                    Continue review
-                  </button>
-                </div>
+              <!-- Dynamically populated by renderHomeScreen from active timetable -->
+              <div style="padding: 28px 16px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: 8px; border: 1px dashed var(--border-color);">
+                <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">No Scheduled Classes For Today</div>
+                <div style="font-size: 12px;">Classes will appear here once added in the Timetable or HOD Governance portal.</div>
               </div>
-
-              <div class="class-schedule-card" onclick="selectClassAndLaunch('CS-3102', 'Algorithms', 'Room B-204', '10:15 – 11:15', 'CS-4B')">
-                <div class="class-time-block">
-                  <div class="time-main">10:15</div>
-                  <div class="time-sub">to 11:15</div>
-                </div>
-                <div class="class-info-block">
-                  <div class="class-title-row">
-                    <span class="course-color-bar" style="background: #0284c7;"></span>
-                    <strong class="course-title">Algorithms</strong>
-                    <span class="card-status-badge badge-next">Next · opens 10:10</span>
-                  </div>
-                  <div class="class-details-txt">CS-3102 · B.Tech Computer Science, Year 4, Section B · Room B-204 · 54 students</div>
-                  <div class="class-progress-txt">Scheduled session</div>
-                </div>
-                <div class="class-action-block">
-                  <button class="btn-action-secondary" onclick="event.stopPropagation(); selectClassAndLaunch('CS-3102', 'Algorithms', 'Room B-204', '10:15 – 11:15', 'CS-4B');">
-                    Open early
-                  </button>
-                </div>
-              </div>
-
-              <div class="class-schedule-card" onclick="selectClassAndLaunch('CS-2210', 'Database Systems', 'Room A-301', '13:15 – 14:15', 'CS-2A')">
-                <div class="class-time-block">
-                  <div class="time-main">13:15</div>
-                  <div class="time-sub">to 14:15</div>
-                </div>
-                <div class="class-info-block">
-                  <div class="class-title-row">
-                    <span class="course-color-bar" style="background: #b25e02;"></span>
-                    <strong class="course-title">Database Systems</strong>
-                    <span class="card-status-badge badge-later">Later</span>
-                  </div>
-                  <div class="class-details-txt">CS-2210 · B.Sc IT, Year 2, Section A · Room A-301 · 48 students</div>
-                  <div class="class-progress-txt">Scheduled session</div>
-                </div>
-                <div class="class-action-block">
-                  <button class="btn-action-secondary" onclick="event.stopPropagation(); selectClassAndLaunch('CS-2210', 'Database Systems', 'Room A-301', '13:15 – 14:15', 'CS-2A');">
-                    View class
-                  </button>
-                </div>
-              </div>
-
-              <div class="class-schedule-card" onclick="selectClassAndLaunch('CS-2108', 'Data Structures Lab', 'Block B, Lab 2', '14:30 – 16:30', 'CS-3B')">
-                <div class="class-time-block">
-                  <div class="time-main">14:30</div>
-                  <div class="time-sub">to 16:30</div>
-                </div>
-                <div class="class-info-block">
-                  <div class="class-title-row">
-                    <span class="course-color-bar" style="background: #7c3aed;"></span>
-                    <strong class="course-title">Data Structures Lab</strong>
-                    <span class="card-status-badge badge-later">Later</span>
-                  </div>
-                  <div class="class-details-txt">CS-2108 · B.Tech Computer Science, Year 3, Section B · Batch 1 · Room B-Lab 2 · 30 students</div>
-                  <div class="class-progress-txt">Lab session with CCTV & webcam support</div>
-                </div>
-                <div class="class-action-block">
-                  <button class="btn-action-secondary" onclick="event.stopPropagation(); selectClassAndLaunch('CS-2108', 'Data Structures Lab', 'Block B, Lab 2', '14:30 – 16:30', 'CS-3B');">
-                    View class
-                  </button>
-                </div>
-              </div>
-
             </div>
 
             <div class="home-footer-note">
@@ -271,17 +191,17 @@
             
             <div class="card selected-class-box">
               <div class="section-micro-heading" style="margin-bottom: 6px;">SELECTED CLASS</div>
-              <h2 class="selected-class-title" id="selectedCardTitle">Data Structures</h2>
-              <div class="selected-class-meta" id="selectedCardMeta">CS-2104 · Section A · Today 09:00</div>
+              <h2 class="selected-class-title" id="selectedCardTitle">No Active Class Session</h2>
+              <div class="selected-class-meta" id="selectedCardMeta">Select a scheduled class from the Timetable to start attendance.</div>
 
               <!-- 4 KPI counters -->
               <div class="kpi-mini-grid">
                 <div class="kpi-mini-box">
-                  <div class="kpi-mini-num" id="homeKpiEnrolled">60</div>
+                  <div class="kpi-mini-num" id="homeKpiEnrolled">0</div>
                   <div class="kpi-mini-label">Enrolled</div>
                 </div>
                 <div class="kpi-mini-box">
-                  <div class="kpi-mini-num" id="homeKpiCounted">50</div>
+                  <div class="kpi-mini-num" id="homeKpiCounted">0</div>
                   <div class="kpi-mini-label">Counted</div>
                 </div>
                 <div class="kpi-mini-box highlight-green">
@@ -289,7 +209,7 @@
                   <div class="kpi-mini-label">Present</div>
                 </div>
                 <div class="kpi-mini-box highlight-amber">
-                  <div class="kpi-mini-num" id="homeKpiReview">6</div>
+                  <div class="kpi-mini-num" id="homeKpiReview">0</div>
                   <div class="kpi-mini-label">To review</div>
                 </div>
               </div>
@@ -366,10 +286,10 @@
         <!-- Breadcrumb & Session Meta Header -->
         <div class="session-meta-bar">
           <div class="meta-left">
-            <div class="breadcrumb" id="sessionBreadcrumb">Attendance › Session #14</div>
-            <h2 class="session-title" id="sessionTitle">CS-2104 · Data Structures</h2>
+            <div class="breadcrumb" id="sessionBreadcrumb">Attendance › Idle</div>
+            <h2 class="session-title" id="sessionTitle">Classroom Face Attendance</h2>
             <div class="session-subtitle" id="sessionSubtitle">
-              <span id="sessionRoomTime">Block B, Lab 3 · 09:00 – 10:00</span> · <span id="trackingStatusText">Spatial tracking active</span>
+              <span id="sessionRoomTime">No active session loaded</span> · <span id="trackingStatusText">Classroom idle</span>
             </div>
             <div class="session-subnav">
               <button class="subnav-btn active" id="btnModeClassroom" onclick="switchInstructorWorkspace('classroom')">Classroom & Camera</button>

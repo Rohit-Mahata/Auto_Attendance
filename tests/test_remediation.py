@@ -34,7 +34,7 @@ class TestRemediationSuite(unittest.TestCase):
         rec = FaceRecognizer()
         ref = np.random.randn(128).astype(np.float32)
         ref /= np.linalg.norm(ref)
-        rec.student_embeddings["TEST_SID_001"] = ref
+        rec.student_embeddings = {"TEST_SID_001": ref}
 
         # Probe matching exactly
         sid, conf, match = rec.match_probe(ref, min_threshold=0.58)
@@ -97,20 +97,24 @@ class TestRemediationSuite(unittest.TestCase):
 
     def test_05_hod_faculty_endpoint_credentials(self):
         """Verifies HOD faculty API returns credentials (user_id and password)."""
-        res = self.app.get("/api/hod/faculty")
-        self.assertEqual(res.status_code, 200)
-        faculty_list = res.get_json()
-        self.assertIsInstance(faculty_list, list)
-        self.assertGreater(len(faculty_list), 0)
+        production_db.add_faculty("FAC_TEST01", "Dr. Test Professor", password="testfaculty")
+        try:
+            res = self.app.get("/api/hod/faculty")
+            self.assertEqual(res.status_code, 200)
+            faculty_list = res.get_json()
+            self.assertIsInstance(faculty_list, list)
+            self.assertGreater(len(faculty_list), 0)
 
-        for f in faculty_list:
-            self.assertIn("employee_id", f)
-            self.assertIn("user_id", f)
-            self.assertIn("password", f)
-            self.assertIn("assigned_subjects", f)
-            self.assertIn("timetable_slots", f)
-            # Ensure password is not empty
-            self.assertTrue(len(f["password"]) > 0)
+            for f in faculty_list:
+                self.assertIn("employee_id", f)
+                self.assertIn("user_id", f)
+                self.assertIn("password", f)
+                self.assertIn("assigned_subjects", f)
+                self.assertIn("timetable_slots", f)
+                # Ensure password is not empty
+                self.assertTrue(len(f["password"]) > 0)
+        finally:
+            production_db.delete_faculty("FAC_TEST01")
 
     def test_06_no_fabricated_attendance_kpis(self):
         """Verifies get_current_session_info does not fabricate attendance when no records exist."""

@@ -20,22 +20,22 @@ const state = {
   
   // Session Metrics (dynamically populated from database)
   session: {
-    id: 14,
-    course: "Data Structures",
-    course_code: "CS-2104",
-    course_name: "Data Structures",
-    room: "Block B, Lab 3",
-    room_code: "Block B, Lab 3",
-    time: "09:00 – 10:00",
-    division: "CS-3A",
-    instructor: "Dr. Meera Iyer",
-    state: "in_progress"
+    id: null,
+    course: "",
+    course_code: "",
+    course_name: "",
+    room: "",
+    room_code: "",
+    time: "",
+    division: "",
+    instructor: "",
+    state: "idle"
   },
-  enrolled: 60,
-  counted: 50,
-  identified: 44,
-  unclearCount: 6,
-  absent: 10,
+  enrolled: 0,
+  counted: 0,
+  identified: 0,
+  unclearCount: 0,
+  absent: 0,
 
   // Lists
   students: [],
@@ -347,7 +347,9 @@ function renderHomeScreen() {
   else if (hour >= 17) greetingTime = "evening";
   
   const greetEl = document.getElementById("homeGreetingTitle");
-  const userName = (state.currentUser && state.currentUser.name) ? state.currentUser.name : "Dr. Iyer";
+  const userName = (state.currentUser && state.currentUser.name) 
+    ? state.currentUser.name 
+    : ((state.session && state.session.instructor) ? state.session.instructor : "Faculty");
   if (greetEl) greetEl.textContent = `Good ${greetingTime}, ${userName}`;
 
   const dateEl = document.getElementById("homeCurrentDate");
@@ -359,20 +361,22 @@ function renderHomeScreen() {
   // 2. Selected Class Box
   const titleEl = document.getElementById("selectedCardTitle");
   const metaEl = document.getElementById("selectedCardMeta");
-  const sess = state.session;
+  const sess = state.session || {};
 
-  if (titleEl) titleEl.textContent = sess.course_name || sess.course || "Data Structures";
-  if (metaEl) metaEl.textContent = `${sess.course_code || "CS-2104"} · Section ${sess.division || "CS-3A"} · Today ${sess.time || "09:00 – 10:00"}`;
+  if (titleEl) titleEl.textContent = sess.course_name || sess.course || "No Active Class Session";
+  if (metaEl) metaEl.textContent = sess.course_code 
+    ? `${sess.course_code} · Section ${sess.division || "--"} · Today ${sess.time || "--"}` 
+    : "Select a scheduled class from the Timetable to start attendance.";
 
   const kEnrolled = document.getElementById("homeKpiEnrolled");
   const kCounted = document.getElementById("homeKpiCounted");
   const kIdentified = document.getElementById("homeKpiIdentified");
   const kReview = document.getElementById("homeKpiReview");
 
-  if (kEnrolled) kEnrolled.textContent = state.enrolled;
-  if (kCounted) kCounted.textContent = state.counted;
-  if (kIdentified) kIdentified.textContent = state.identified;
-  if (kReview) kReview.textContent = state.unclearCount;
+  if (kEnrolled) kEnrolled.textContent = state.enrolled || 0;
+  if (kCounted) kCounted.textContent = state.counted || 0;
+  if (kIdentified) kIdentified.textContent = state.identified || 0;
+  if (kReview) kReview.textContent = state.unclearCount || 0;
 
   // 3. Mini student list
   const miniList = document.getElementById("homeMiniStudentsList");
@@ -403,6 +407,56 @@ function renderHomeScreen() {
           <span class="status-pill ${pillCls}">${s.status}</span>
         `;
         miniList.appendChild(row);
+      });
+    }
+  }
+
+  // 4. Dynamic Day Schedule Cards (YOUR DAY)
+  const cardsContainer = document.getElementById("homeScheduleCardsList");
+  if (cardsContainer) {
+    const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    const todayName = days[new Date().getDay()];
+    const todaySlots = (state.timetableData && state.timetableData[todayName]) ? state.timetableData[todayName] : [];
+
+    if (todaySlots.length === 0) {
+      cardsContainer.innerHTML = `
+        <div style="padding: 28px 16px; text-align: center; color: var(--text-muted); background: var(--bg-card); border-radius: 8px; border: 1px dashed var(--border-color);">
+          <div style="font-size: 14px; font-weight: 600; margin-bottom: 6px; color: var(--text-primary);">No Scheduled Classes For Today (${todayName})</div>
+          <div style="font-size: 12px;">Classes will appear here once added in the Timetable or HOD Governance portal.</div>
+        </div>
+      `;
+    } else {
+      cardsContainer.innerHTML = "";
+      todaySlots.forEach((slot, idx) => {
+        const parts = (slot.slot || "09:00 - 10:00").split("–");
+        const tStart = parts[0] ? parts[0].trim() : "09:00";
+        const tEnd = parts[1] ? parts[1].trim() : "10:00";
+        const isActive = (state.session && state.session.course_code === slot.code) || idx === 0;
+
+        const card = document.createElement("div");
+        card.className = `class-schedule-card ${isActive ? "active-card" : ""}`;
+        card.onclick = () => selectClassAndLaunch(slot.code, slot.course, slot.room, slot.slot, slot.section);
+        card.innerHTML = `
+          <div class="class-time-block">
+            <div class="time-main">${tStart}</div>
+            <div class="time-sub">to ${tEnd}</div>
+          </div>
+          <div class="class-info-block">
+            <div class="class-title-row">
+              <span class="course-color-bar" style="background: ${isActive ? '#1d734d' : '#0284c7'};"></span>
+              <strong class="course-title">${slot.course}</strong>
+              <span class="card-status-badge ${isActive ? 'badge-active' : 'badge-next'}">${isActive ? 'Active session' : 'Scheduled'}</span>
+            </div>
+            <div class="class-details-txt">${slot.code} · Class ${slot.section} · Room ${slot.room} · ${slot.instructor || 'Faculty'}</div>
+            <div class="class-progress-txt">${slot.students || 0} students</div>
+          </div>
+          <div class="class-action-block">
+            <button class="${isActive ? 'btn-action-primary' : 'btn-action-secondary'}" onclick="event.stopPropagation(); selectClassAndLaunch('${slot.code}', '${slot.course}', '${slot.room}', '${slot.slot}', '${slot.section}');">
+              ${isActive ? 'Start attendance' : 'View class'}
+            </button>
+          </div>
+        `;
+        cardsContainer.appendChild(card);
       });
     }
   }

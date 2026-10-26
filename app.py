@@ -403,7 +403,7 @@ def api_capture_pose_step():
     cleanup_expired_pose_sessions()
 
     data = request.get_json(silent=True) or {}
-    student_id = str(data.get("student_id", "22CS1047")).strip()
+    student_id = str(data.get("student_id", "")).strip()
     pose = str(data.get("pose", "front")).strip().lower()
     target_count = int(data.get("count", 10))
 
@@ -465,8 +465,8 @@ def api_finalize_pose_training():
     """Trains multi-pose centroid vector, encrypts into vault, and updates recognizer."""
     global pose_capture_sessions
     data = request.get_json(silent=True) or {}
-    student_id = str(data.get("student_id", "22CS1047")).strip()
-    actor = data.get("actor", "Dr. Meera Iyer")
+    student_id = str(data.get("student_id", "")).strip()
+    actor = data.get("actor", "Faculty")
 
     student_poses = pose_capture_sessions.get(student_id, {})
     all_vectors = []
@@ -773,60 +773,36 @@ def api_get_unclear_crops(person_id):
     return jsonify({"person_id": person_id, "crops": crops})
 
 # ================= Teacher & Class Catalog =================
-TEACHERS_CATALOG = [
-    {
-        "id": "FAC104",
-        "name": "Dr. Meera Iyer",
-        "department": "Computer Science",
-        "role": "Associate Professor",
-        "course_code": "CS-2104",
-        "course_name": "Data Structures",
-        "room": "Block B, Lab 3",
-        "time": "09:00 – 10:00",
-        "section": "CS-3A"
-    },
-    {
-        "id": "FAC102",
-        "name": "Prof. Rajesh Sharma",
-        "department": "Computer Science",
-        "role": "Professor",
-        "course_code": "CS-3102",
-        "course_name": "Algorithms",
-        "room": "Room B-204",
-        "time": "10:15 – 11:15",
-        "section": "CS-3A"
-    },
-    {
-        "id": "FAC108",
-        "name": "Dr. Ananya Sen",
-        "department": "Computer Science",
-        "role": "Associate Professor",
-        "course_code": "CS-2210",
-        "course_name": "Database Systems",
-        "room": "Room A-301",
-        "time": "13:15 – 14:15",
-        "section": "CS-3A"
-    },
-    {
-        "id": "FAC115",
-        "name": "Dr. K. P. Adhikari",
-        "department": "Computer Science",
-        "role": "Lecturer",
-        "course_code": "CS-2106",
-        "course_name": "Computer Organisation",
-        "room": "Room B-105",
-        "time": "11:30 – 12:30",
-        "section": "CS-3A"
-    }
-]
+def get_dynamic_teachers():
+    """Queries active faculty members and their assigned subjects/classes from DB."""
+    with production_db.get_connection() as conn:
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT i.employee_id as id, i.name, i.department, i.role,
+                   COALESCE(s.code, '') as course_code,
+                   COALESCE(s.name, '') as course,
+                   COALESCE(s.name, '') as course_name,
+                   COALESCE(s.room, '') as room,
+                   '' as time,
+                   '' as section
+            FROM instructors i
+            LEFT JOIN department_subjects s ON i.employee_id = s.assigned_faculty_id
+            ORDER BY i.name ASC;
+        """)
+        rows = [dict(r) for r in cur.fetchall()]
+        for r in rows:
+            names = (r["name"] or "").split()
+            r["initials"] = "".join(p[0] for p in names[:2]).upper() if names else "FA"
+        return rows
 
-current_active_teacher = TEACHERS_CATALOG[0]
+current_active_teacher = None
 
 @flask_app.route("/api/teachers", methods=["GET"])
 def api_get_teachers():
+    teachers = get_dynamic_teachers()
     return jsonify({
-        "teachers": TEACHERS_CATALOG,
-        "current": current_active_teacher
+        "teachers": teachers,
+        "current": current_active_teacher or (teachers[0] if teachers else None)
     })
 
 @flask_app.route("/api/teacher/switch", methods=["POST"])
@@ -834,24 +810,26 @@ def api_switch_teacher():
     global current_active_teacher
     data = request.get_json(silent=True) or {}
     t_id = data.get("teacher_id")
-    target = next((t for t in TEACHERS_CATALOG if t["id"] == t_id or t["name"] == t_id), None)
+    teachers = get_dynamic_teachers()
+    target = next((t for t in teachers if t["id"] == t_id or t["name"] == t_id), None)
     if not target:
         return jsonify({"success": False, "message": "Teacher not found"}), 404
 
     current_active_teacher = target
     success, msg, sess_info = production_db.set_active_class_session(
-        target["course_code"],
-        target["course_name"],
-        target["room"],
-        target["time"],
-        target["section"],
-        target["name"]
+        target.get("course_code", ""),
+        target.get("course", ""),
+        target.get("room", ""),
+        target.get("time", ""),
+        target.get("section", ""),
+        target.get("name", "")
     )
     return jsonify({
         "success": True,
         "current_teacher": current_active_teacher,
+        "teacher": current_active_teacher,
         "session": sess_info,
-        "message": f"Switched active teacher to {target['name']}. Active course: {target['course_name']} ({target['course_code']}) for Class {target['section']}."
+        "message": f"Switched active teacher to {target['name']}."
     })
 
 @flask_app.route("/api/timetable", methods=["GET"])
@@ -865,12 +843,12 @@ def api_get_timetable():
 def api_select_timetable():
     """Activates the selected timetable slot as the live attendance session."""
     data = request.get_json(silent=True) or {}
-    course_code = data.get("course_code", "CS-2104")
-    course_name = data.get("course_name", "Data Structures")
-    room_code = data.get("room_code", "Block B, Lab 3")
-    time_slot = data.get("time_slot", "09:00 – 10:00")
-    section_code = data.get("section_code", "CS-3A")
-    actor = data.get("actor", "Dr. Meera Iyer")
+    course_code = data.get("course_code", "")
+    course_name = data.get("course_name", "")
+    room_code = data.get("room_code", "")
+    time_slot = data.get("time_slot", "")
+    section_code = data.get("section_code", "")
+    actor = data.get("actor", "Faculty")
 
     success, msg, session_info = production_db.set_active_class_session(
         course_code, course_name, room_code, time_slot, section_code, actor
@@ -960,7 +938,14 @@ def api_auth_switch_role():
     if target_role == "hod":
         user = production_db.authenticate_user("HOD01", "admin", "hod")
     else:
-        user = production_db.authenticate_user("FAC104", "faculty", "faculty")
+        with production_db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT user_id, password FROM users WHERE role = 'faculty' LIMIT 1;")
+            fac_row = cur.fetchone()
+        if fac_row:
+            user = production_db.authenticate_user(fac_row["user_id"], fac_row["password"], "faculty")
+        else:
+            user = None
 
     if user:
         session["user"] = user
@@ -1037,8 +1022,8 @@ def api_hod_add_subject():
     name = data.get("name", "").strip()
     dept = data.get("department", "Computer Science").strip()
     credits = int(data.get("credits", 3))
-    faculty_id = data.get("faculty_id", "FAC104").strip()
-    room = data.get("room", "Block B, Lab 3").strip()
+    faculty_id = data.get("faculty_id", "").strip()
+    room = data.get("room", "").strip()
 
     if not code or not name:
         return jsonify({"success": False, "message": "Course code and title are required."}), 400
@@ -1252,8 +1237,8 @@ def api_get_audit_logs():
 def api_session_submit():
     """Atomically closes session and saves full verified attendance (present/absent) to database."""
     data = request.get_json(silent=True) or {}
-    session_id = data.get("session_id", 14)
-    actor = data.get("submitted_by", "Dr. Meera Iyer")
+    session_id = data.get("session_id")
+    actor = data.get("submitted_by", "Faculty")
     records = data.get("records")
 
     if records and isinstance(records, list) and len(records) > 0:
@@ -1272,8 +1257,8 @@ def api_review_decision():
     data = request.get_json(silent=True) or {}
     decision = data.get("decision", "confirm")
     student_id = data.get("student_id")
-    track_id = data.get("track_id", "track_2")
-    actor = data.get("actor", "Dr. Meera Iyer")
+    track_id = data.get("track_id", "track_1")
+    actor = data.get("actor", "Faculty")
 
     if decision == "confirm":
         production_db.log_audit(actor, "CONFIRM_REVIEW_CANDIDATE", "tracks", track_id, after=f"student={student_id}")
@@ -1465,7 +1450,7 @@ def api_action_correction(corr_id):
     """Instructor/Dept reviews correction (approved / declined)."""
     data = request.get_json(silent=True) or {}
     status = data.get("status", "approved")
-    decided_by = data.get("decided_by", "Dr. Meera Iyer")
+    decided_by = data.get("decided_by", "Faculty")
     note = data.get("note", "")
 
     success, msg = production_db.update_correction_status(corr_id, status, decided_by, note)
@@ -1492,7 +1477,7 @@ def api_override_attendance(student_id):
     """Overrides attendance status for a student (present / absent / late)."""
     data = request.get_json(silent=True) or {}
     status = data.get("status", "present")
-    actor = data.get("actor", "Dr. Meera Iyer")
+    actor = data.get("actor", "Faculty")
     success, msg = production_db.override_student_attendance(student_id, status, actor)
     return jsonify({"success": success, "message": msg}), (200 if success else 400)
 
@@ -1506,7 +1491,7 @@ def api_remind_pending_students():
 def api_send_department_notice():
     """Sends attendance warning notice to a student and their academic mentor."""
     data = request.get_json(silent=True) or {}
-    student_id = data.get("student_id", "22CS1007")
+    student_id = data.get("student_id", "")
     student_name = data.get("student_name", "Student")
     production_db.log_audit("DeptOffice", "SEND_ATTENDANCE_NOTICE", "students", student_id, after="Warning letter sent to student and mentor")
     return jsonify({"success": True, "message": f"Official attendance notice sent to {student_name} ({student_id}) and mentor."})
