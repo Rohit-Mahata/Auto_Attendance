@@ -49,8 +49,8 @@
               <span class="nav-label">Student Enrollment</span>
             </button>
 
-            <!-- Tab 4: Review Queue Shortcut -->
-            <button class="nav-item" id="navItemReview" onclick="jumpToReviewQueue()">
+            <!-- Tab 4: Review Queue (Dedicated View) -->
+            <button class="nav-item" data-view="reviewView" id="navItemReview">
               <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg></span>
               <span class="nav-label">Review Queue</span>
               <span class="nav-badge" id="sidebarReviewBadge">0</span>
@@ -419,6 +419,7 @@
                     <button class="seg-btn active" id="btnByPerson" onclick="setReviewMode('person')">Review Queue (<span id="unclearQueueCountBadge">0</span>)</button>
                     <button class="seg-btn" id="btnPresentList" onclick="setReviewMode('present')">Present Students (<span id="presentCountBadge">0</span>)</button>
                     <button class="seg-btn" id="btnAbsentList" onclick="setReviewMode('absent')">Absent (<span id="absentCountBadge">0</span>)</button>
+                    <button class="seg-btn" onclick="switchView('reviewView')" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 700;">🔍 Open Dedicated Review Panel</button>
                   </div>
                 </div>
                 <!-- Submit Attendance Button in the Corner -->
@@ -731,7 +732,234 @@
       </main>
 
       <!-- ============================================================ -->
-      <!-- VIEW 4: AI MODEL TRAINING & ROSTER (User Requested)          -->
+      <!-- VIEW 2.5: DEDICATED REVIEW QUEUE & CAPTURED GRID VIEW        -->
+      <!-- ============================================================ -->
+      <main id="reviewView" class="view-section">
+        
+        <!-- Breadcrumb & Session Meta Header -->
+        <div class="session-meta-bar">
+          <div class="meta-left">
+            <div class="breadcrumb" id="rvSessionBreadcrumb">Attendance › Session Active</div>
+            <h2 class="session-title" id="rvSessionTitle">Classroom Face Attendance</h2>
+            <div class="session-subtitle" id="rvSessionSubtitle">
+              <span id="rvSessionRoomTime">Classroom · Live Session</span> · <span id="rvTrackingStatusText" style="color: #d97706; font-weight: 700;">Still tracking attendees</span>
+            </div>
+            <div class="session-subnav">
+              <button class="subnav-btn active" id="btnRvClassroomGrid" onclick="switchReviewWorkspace('grid')">Captured Images in Grid</button>
+              <button class="subnav-btn" id="btnRvRosterList" onclick="switchReviewWorkspace('roster')">Attendance Roster</button>
+            </div>
+          </div>
+
+          <!-- Stat Counters Strip -->
+          <div class="kpi-group">
+            <div class="kpi-item">
+              <div class="kpi-val" id="rvKpiEnrolled">0</div>
+              <div class="kpi-lbl">Enrolled</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-val" id="rvKpiCounted">0</div>
+              <div class="kpi-lbl">Counted in room</div>
+            </div>
+            <div class="kpi-item highlight-green">
+              <div class="kpi-val" id="rvKpiIdentified">0</div>
+              <div class="kpi-lbl">Identified</div>
+            </div>
+            <div class="kpi-item highlight-amber">
+              <div class="kpi-val" id="rvKpiUnclear">0</div>
+              <div class="kpi-lbl">Unclear</div>
+            </div>
+            <div class="kpi-item">
+              <div class="kpi-val" id="rvKpiAbsent">0</div>
+              <div class="kpi-lbl">Absent</div>
+            </div>
+
+            <div class="submit-box">
+              <button class="btn-submit" id="rvBtnSubmit" onclick="submitAttendanceSession()">Submit</button>
+              <div class="submit-hint" id="rvSubmitHint">Resolve unclear to submit</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Two-Column Review Layout: Classroom Grid (Left) + Needs Review Panel (Right) -->
+        <div class="classroom-workspace" id="rvMainWorkspace">
+          
+          <!-- LEFT COLUMN: CLASSROOM VIEW (Captured Images in Grid) -->
+          <div class="panel-left">
+            <div class="card classroom-card">
+              
+              <div class="card-header-flex" style="border-bottom: 1px solid var(--border-light); padding-bottom: 12px; margin-bottom: 14px;">
+                <div>
+                  <span class="card-title" style="font-size: 14px; font-weight: 800; letter-spacing: 0.5px;">CLASSROOM VIEW</span>
+                </div>
+                <div style="font-size: 12px; color: var(--text-muted); font-weight: 600;" id="rvDeskMetaLabel">
+                  Captured images in grid view · 5 rows of 10
+                </div>
+              </div>
+
+              <!-- Dark Chalkboard Classroom Seating Container -->
+              <div class="classroom-board-box">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                  <span class="snapshot-time-badge" id="rvSnapshotBadge">Snapshot Live</span>
+                  <span style="font-size: 11px; color: #94a3b8; font-weight: 500;">Front of Classroom ⬆️</span>
+                </div>
+
+                <!-- 5x10 Desk Grid -->
+                <div class="desk-grid-5x10" id="rvDeskGrid">
+                  <!-- Dynamically rendered 50 desks (identified = crop image + green ring, unclear = orange ring + number, absent = blank) -->
+                </div>
+
+                <!-- Legend below grid -->
+                <div class="grid-legend" style="margin-top: 16px; border-top: 1px solid #334155; padding-top: 12px; display: flex; gap: 18px; align-items: center; font-size: 11.5px; color: #94a3b8;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span class="legend-ring ring-green"></span>
+                    <span>Identified with confidence</span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span class="legend-ring ring-amber" style="position: relative;">
+                      <span style="position: absolute; top: -5px; right: -5px; background: #d97706; color: #fff; font-size: 8px; width: 10px; height: 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">1</span>
+                    </span>
+                    <span>Unclear, being tracked</span>
+                  </div>
+                  <div style="margin-left: auto; color: #64748b; font-size: 11px;">
+                    Rings follow each person between frames
+                  </div>
+                </div>
+              </div>
+
+              <!-- HOW THE NUMBERS ADD UP BREAKDOWN CARD -->
+              <div class="numbers-breakdown-card" style="margin-top: 16px;">
+                <div class="breakdown-title" style="font-size: 12px; font-weight: 800; color: #475569; letter-spacing: 0.5px; margin-bottom: 10px;">HOW THE NUMBERS ADD UP</div>
+                
+                <div class="breakdown-step">
+                  <div class="step-badge">1</div>
+                  <div class="step-desc">
+                    <strong>Count everyone first</strong>
+                    <span class="step-math" id="rvStep1Math">0 enrolled – 0 counted</span>
+                  </div>
+                  <div class="step-result text-green" id="rvStep1Result">= 0 absent</div>
+                </div>
+
+                <div class="breakdown-step">
+                  <div class="step-badge">2</div>
+                  <div class="step-desc">
+                    <strong>Name the faces</strong>
+                    <span class="step-math" id="rvStep2Math">0 counted – 0 identified</span>
+                  </div>
+                  <div class="step-result text-amber" id="rvStep2Result">= 0 still unclear</div>
+                </div>
+
+                <div class="breakdown-step">
+                  <div class="step-badge">3</div>
+                  <div class="step-desc">
+                    <strong>Check the names left</strong>
+                    <span class="step-math" id="rvStep3Math">0 enrolled – 0 identified</span>
+                  </div>
+                  <div class="step-result text-dark" id="rvStep3Result">= 0 names unaccounted</div>
+                </div>
+
+                <div style="font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-light);" id="rvStepSummaryNote">
+                  Unaccounted names = people in the room + absent. Unclear faces are only compared against these.
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- RIGHT COLUMN: NEEDS REVIEW PANEL -->
+          <div class="panel-right">
+            <div class="card review-card">
+              
+              <div class="review-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 12px; margin-bottom: 14px;">
+                <span class="review-title" id="rvNeedsReviewTitle" style="font-size: 13px; font-weight: 800; letter-spacing: 0.5px;">NEEDS REVIEW</span>
+                <div class="segmented-control">
+                  <button class="seg-btn active" id="rvBtnByPerson" onclick="setReviewTabMode('person')">By person</button>
+                  <button class="seg-btn" id="rvBtnByName" onclick="setReviewTabMode('name')">By name</button>
+                </div>
+              </div>
+
+              <!-- TAB 1: BY PERSON MODE -->
+              <div id="rvPersonTab">
+                
+                <!-- Person Numbered Pager -->
+                <div class="pager-strip">
+                  <div class="pager-buttons" id="rvPersonPagerButtons">
+                    <!-- Dynamically generated buttons [1] [2] [3]... -->
+                  </div>
+                  <div class="pager-caption">People leave this list once they are named</div>
+                </div>
+
+                <!-- Photos of this person Strip / Carousel -->
+                <div class="carousel-container" style="margin-top: 14px;">
+                  <div class="carousel-title" id="rvCropsTitle" style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
+                    Photos of this person
+                  </div>
+                  <div class="carousel-viewport" style="display: flex; align-items: center; gap: 6px; position: relative;">
+                    <button class="carousel-arrow" onclick="rvCarouselSlide(-1)">‹</button>
+                    <div class="carousel-track" id="rvCropsTrack" style="display: flex; gap: 8px; overflow-x: auto; scroll-behavior: smooth; padding: 4px 2px;">
+                      <!-- Cropped photos from footage -->
+                    </div>
+                    <button class="carousel-arrow" onclick="rvCarouselSlide(1)">›</button>
+                  </div>
+                </div>
+
+                <!-- Tracking Callout Box -->
+                <div class="callout-box tracking-box" style="margin-top: 14px;">
+                  <div class="callout-lead" id="rvTrackingLead">Spatial tracking active</div>
+                  <div class="callout-sub">The camera keeps following this person and marks them automatically as soon as a face is clear.</div>
+                </div>
+
+                <!-- Possible Candidate Names List -->
+                <div class="candidates-section" style="margin-top: 16px;">
+                  <div class="candidates-title" id="rvCandidatesTitle" style="font-size: 11.5px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                    POSSIBLE NAMES · FROM THE UNACCOUNTED
+                  </div>
+                  <div class="candidate-list" id="rvCandidateCardsList">
+                    <!-- Candidate cards with 'This is them' button & 'Compare Photo' -->
+                  </div>
+                </div>
+
+                <!-- Bottom Actions Strip -->
+                <div class="review-bottom-actions" style="margin-top: 16px; display: flex; gap: 10px;">
+                  <button class="btn-action-secondary" onclick="rvActionNoneOfThese()">None of these</button>
+                  <button class="btn-action-secondary" onclick="rvActionSkipTracking()">Skip and keep tracking</button>
+                </div>
+
+              </div>
+
+              <!-- TAB 2: BY NAME MODE -->
+              <div id="rvNameTab" class="hidden">
+                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
+                  Select any student to match their captured footage photo with their enrolled reference:
+                </div>
+                
+                <!-- Under Review Students Section -->
+                <div style="margin-bottom: 16px;">
+                  <div style="font-size: 11.5px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;"></span>
+                    Under Review Attendees (<span id="rvUnderReviewCount">0</span>)
+                  </div>
+                  <div id="rvUnderReviewList" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- Dynamically populated under review students -->
+                  </div>
+                </div>
+
+                <!-- Unaccounted / Absent Students Section -->
+                <div>
+                  <div style="font-size: 11.5px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">
+                    Unaccounted / Absent Students (<span id="rvUnaccountedCount">0</span>)
+                  </div>
+                  <div id="rvUnaccountedList" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto;">
+                    <!-- Dynamically populated unaccounted students -->
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </main>
       <!-- ============================================================ -->
       <main id="trainingView" class="view-section">
         
@@ -2154,6 +2382,79 @@
           </div>
         </form>
       </div>
+    </div>
+  <!-- ============================================================ -->
+  <!-- STUDENT VERIFICATION & PHOTO MATCH PROFILE MODAL             -->
+  <!-- ============================================================ -->
+  <div id="studentVerificationModal" class="modal-backdrop hidden" onclick="handleBackdropClick(event, 'studentVerificationModal')">
+    <div class="modal-card" style="max-width: 680px; width: 95%;">
+      
+      <div class="modal-header" style="border-bottom: 1px solid var(--border-light); padding-bottom: 12px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h3 class="modal-title" style="font-size: 17px; font-weight: 800; color: var(--text-main);">Verify Student Identity</h3>
+          <div style="font-size: 12px; color: var(--text-muted); margin-top: 2px;">
+            Match captured classroom footage crop with university enrolled photo
+          </div>
+        </div>
+        <button class="btn-modal-close" onclick="closeVerificationModal()">✕</button>
+      </div>
+
+      <!-- Student Header Bar -->
+      <div style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div class="avatar-circle" id="svmStudentAvatar" style="width: 42px; height: 42px; font-size: 16px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-radius: 50%; display: flex; align-items: center; justify-content: center;">KM</div>
+          <div>
+            <div style="font-size: 15px; font-weight: 800; color: var(--text-main);" id="svmStudentName">Karan Mehta</div>
+            <div style="font-size: 12px; color: var(--text-muted);">
+              ID: <strong style="color: var(--text-main);" id="svmStudentId">22CS1038</strong> · Section <span id="svmStudentSection">CS-3A</span>
+            </div>
+          </div>
+        </div>
+        <div>
+          <span class="status-pill pill-review" id="svmMatchScoreBadge" style="font-size: 12px; padding: 4px 12px; font-weight: 700;">88.5% Match</span>
+        </div>
+      </div>
+
+      <!-- SIDE-BY-SIDE PHOTO COMPARISON -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+        
+        <!-- Left: Captured Footage Crop -->
+        <div style="background: #0f172a; border: 2px solid #f59e0b; border-radius: 10px; padding: 14px; text-align: center; color: #f8fafc;">
+          <div style="font-size: 12px; font-weight: 700; color: #f59e0b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span>📷 Captured from Footage</span>
+          </div>
+          <div style="width: 170px; height: 170px; margin: 0 auto 10px auto; border-radius: 8px; overflow: hidden; background: #1e293b; border: 2px solid rgba(245,158,11,0.5);">
+            <img id="svmProbeImg" src="" alt="Captured Footage Crop" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+          <div style="font-size: 11.5px; font-weight: 600; color: #cbd5e1;" id="svmFootageTimeLabel">Captured today in classroom</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;" id="svmFootageSeatLabel">Tracked at Seat Position</div>
+        </div>
+
+        <!-- Right: Trained Reference Photo -->
+        <div style="background: #0f172a; border: 2px solid #22c55e; border-radius: 10px; padding: 14px; text-align: center; color: #f8fafc;">
+          <div style="font-size: 12px; font-weight: 700; color: #22c55e; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <span>🎓 Trained Reference Photo</span>
+          </div>
+          <div style="width: 170px; height: 170px; margin: 0 auto 10px auto; border-radius: 8px; overflow: hidden; background: #1e293b; border: 2px solid rgba(34,197,94,0.5);">
+            <img id="svmRefImg" src="" alt="Enrolled Reference" style="width: 100%; height: 100%; object-fit: cover;">
+          </div>
+          <div style="font-size: 11.5px; font-weight: 600; color: #cbd5e1;">University Biometric Vault</div>
+          <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Enrolled Photo on File</div>
+        </div>
+
+      </div>
+
+      <!-- Action Buttons Bar -->
+      <div style="display: flex; gap: 12px; justify-content: flex-end; align-items: center; border-top: 1px solid var(--border-light); padding-top: 16px;">
+        <button type="button" class="btn-action-secondary" onclick="closeVerificationModal()" style="padding: 9px 18px; font-size: 13px;">Cancel</button>
+        <button type="button" class="btn-action-secondary" onclick="confirmVerificationAbsent()" style="color: #dc2626; border-color: #fca5a5; font-weight: 700; padding: 9px 18px; font-size: 13px;">
+          ✕ Mark Absent
+        </button>
+        <button type="button" class="btn-action-primary" onclick="confirmVerificationPresent()" style="background: #15803d; font-weight: 800; padding: 9px 24px; font-size: 13.5px; display: inline-flex; align-items: center; gap: 6px;">
+          ✓ Mark Present
+        </button>
+      </div>
+
     </div>
   </div>
 
