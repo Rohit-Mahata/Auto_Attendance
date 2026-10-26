@@ -1262,16 +1262,34 @@ class ProductionDatabase:
             cur.execute("SELECT id FROM rooms WHERE room_code = ?;", (room_code,))
             room_id = cur.fetchone()[0]
 
+            # Ensure instructor exists
+            cur.execute("SELECT id FROM instructors LIMIT 1;")
+            inst_row = cur.fetchone()
+            if not inst_row:
+                cur.execute("INSERT INTO instructors (employee_id, name, department, role) VALUES ('INS_001', 'Dr. Meera Iyer', 'Computer Science', 'faculty');")
+                inst_id = cur.lastrowid
+            else:
+                inst_id = inst_row[0]
+
             # Ensure section exists
-            cur.execute("INSERT OR IGNORE INTO sections (course_id, section_code, room_id, instructor_id) VALUES (?, ?, ?, 1);", (course_id, section_code, room_id))
+            cur.execute("INSERT OR IGNORE INTO sections (course_id, section_code, room_id, instructor_id) VALUES (?, ?, ?, ?);", (course_id, section_code, room_id, inst_id))
             cur.execute("SELECT id FROM sections WHERE course_id = ? AND section_code = ?;", (course_id, section_code))
             section_id = cur.fetchone()[0]
+
+            # Ensure camera exists
+            cur.execute("SELECT id FROM cameras LIMIT 1;")
+            cam_row = cur.fetchone()
+            if not cam_row:
+                cur.execute("INSERT INTO cameras (room_id, stream_url, name) VALUES (?, '0', 'Classroom Webcam');", (room_id,))
+                cam_id = cur.lastrowid
+            else:
+                cam_id = cam_row[0]
 
             # Update or create active session
             cur.execute("""
                 INSERT INTO sessions (section_id, room_id, camera_id, start_time, end_time, state)
-                VALUES (?, ?, 1, ?, ?, 'in_review');
-            """, (section_id, room_id, start_t, end_t))
+                VALUES (?, ?, ?, ?, ?, 'in_review');
+            """, (section_id, room_id, cam_id, start_t, end_t))
             sess_id = cur.lastrowid
             conn.commit()
 
