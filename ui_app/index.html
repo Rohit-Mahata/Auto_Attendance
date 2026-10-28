@@ -56,6 +56,12 @@
               <span class="nav-badge" id="sidebarReviewBadge">0</span>
             </button>
 
+            <!-- Tab 5: Record (Subject-wise Attendance & PDF Export) -->
+            <button class="nav-item" data-view="recordView" id="navItemRecord">
+              <span class="nav-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg></span>
+              <span class="nav-label">Record</span>
+            </button>
+
             <div class="nav-section-label" style="margin-top: 20px;">MY SCHEDULE & MODEL</div>
 
             <!-- Tab 5: My Timetable (Loaded from HOD Schedule) -->
@@ -327,6 +333,28 @@
           </div>
         </div>
 
+        <!-- Dynamic Class and Subject Selector Bar (From Timetable & HOD Decisions) -->
+        <div class="class-subject-selector-bar" style="display: flex; align-items: center; justify-content: space-between; background: #ffffff; border: 1.5px solid var(--border-light); border-radius: 8px; padding: 12px 18px; margin-bottom: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex-wrap: wrap; gap: 12px;">
+          <div style="display: flex; align-items: center; gap: 18px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label for="classroomClassSelect" style="font-size: 12px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px;">🏫 Class / Section:</label>
+              <select id="classroomClassSelect" onchange="onClassroomClassChange(this.value)" style="padding: 7px 14px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-weight: 700; font-size: 13px; color: #0f172a; background: #f8fafc; cursor: pointer; outline: none; min-width: 140px;">
+                <!-- Populated dynamically from timetable entries -->
+              </select>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <label for="classroomSubjectSelect" style="font-size: 12px; font-weight: 800; color: #334155; text-transform: uppercase; letter-spacing: 0.5px;">📚 Subject:</label>
+              <select id="classroomSubjectSelect" onchange="onClassroomSubjectChange(this.value)" style="padding: 7px 14px; border-radius: 6px; border: 1.5px solid #cbd5e1; font-weight: 700; font-size: 13px; color: #0f172a; background: #f8fafc; cursor: pointer; outline: none; min-width: 240px;">
+                <!-- Populated dynamically based on selected class -->
+              </select>
+            </div>
+          </div>
+          <div id="classroomAssignedInfo" style="font-size: 12px; color: #64748b; font-weight: 600; display: flex; align-items: center; gap: 8px;">
+            <span class="status-pill pill-present" style="font-size: 11px;">Active Section</span>
+            <span id="classroomScheduleBadge">Faculty: Jaspreet Singh · Block B, Lab 3</span>
+          </div>
+        </div>
+
         <!-- Headcount Alert Banner -->
         <div class="alert-banner warning-banner hidden" id="mismatchBanner">
           <div class="banner-icon">⚠️</div>
@@ -358,13 +386,12 @@
                   <button class="cam-tab-btn active" id="btnCamWebcam" onclick="setCameraViewMode('webcam')">Laptop Camera</button>
                   <button class="cam-tab-btn" id="btnCamIPCam" onclick="setCameraViewMode('ipcam')">📱 Phone Camera</button>
                   <button class="cam-tab-btn" id="btnCamCCTV" onclick="setCameraViewMode('cctv')">CCTV Camera</button>
-                  <button class="cam-tab-btn" onclick="openIpCameraModal()" title="Configure Camera IP" style="padding: 6px 10px; font-size: 13px;">⚙️ Setup IP</button>
+                  <button class="cam-tab-btn" onclick="openIpCameraModal()" title="Configure Phone Camera IP & Port" style="padding: 6px 12px; font-size: 13px;">⚙️ Setup IP</button>
                 </div>
               </div>
 
               <!-- Screen Display Area (Live Video Feed) -->
               <div class="video-canvas-container" id="cameraFeedWrapper">
-                
                 <!-- Live Video Stream from OpenCV -->
                 <div id="liveVideoBox" class="live-stream-box">
                   <img id="cameraStreamImg" src="" class="live-stream-element" alt="Live Camera Feed">
@@ -414,12 +441,10 @@
               
               <div class="review-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 12px; margin-bottom: 14px; gap: 8px; flex-wrap: wrap;">
                 <div style="display: flex; align-items: center; gap: 10px;">
-                  <span class="review-title" id="reviewPanelTitle">ATTENDANCE & REVIEW</span>
+                  <span class="review-title" id="reviewPanelTitle">ATTENDANCE</span>
                   <div class="segmented-control" id="reviewSegmentControl">
-                    <button class="seg-btn active" id="btnByPerson" onclick="setReviewMode('person')">Review Queue (<span id="unclearQueueCountBadge">0</span>)</button>
-                    <button class="seg-btn" id="btnPresentList" onclick="setReviewMode('present')">Present Students (<span id="presentCountBadge">0</span>)</button>
+                    <button class="seg-btn active" id="btnPresentList" onclick="setReviewMode('present')">Present (<span id="presentCountBadge">0</span>)</button>
                     <button class="seg-btn" id="btnAbsentList" onclick="setReviewMode('absent')">Absent (<span id="absentCountBadge">0</span>)</button>
-                    <button class="seg-btn" onclick="switchView('reviewView')" style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-weight: 700;">🔍 Open Dedicated Review Panel</button>
                   </div>
                 </div>
                 <!-- Submit Attendance Button in the Corner -->
@@ -430,7 +455,7 @@
               </div>
 
               <!-- PERSON MODE VIEW -->
-              <div id="reviewPersonMode">
+              <div id="reviewPersonMode" class="hidden">
                 
                 <!-- Person Numbered Pager -->
                 <div class="pager-strip">
@@ -490,7 +515,7 @@
               </div>
 
               <!-- VERIFIED PRESENT STUDENTS & ABSENT LIST VIEW -->
-              <div id="reviewRosterDisplayMode" class="hidden">
+              <div id="reviewRosterDisplayMode">
                 <div id="rosterDisplayContainer" style="max-height: 480px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px;">
                   <!-- Dynamically populated present/absent student cards with name, roll number, status, method, time -->
                 </div>
@@ -750,33 +775,12 @@
             </div>
           </div>
 
-          <!-- Stat Counters Strip -->
-          <div class="kpi-group">
-            <div class="kpi-item">
-              <div class="kpi-val" id="rvKpiEnrolled">0</div>
-              <div class="kpi-lbl">Enrolled</div>
-            </div>
-            <div class="kpi-item">
-              <div class="kpi-val" id="rvKpiCounted">0</div>
-              <div class="kpi-lbl">Counted in room</div>
-            </div>
-            <div class="kpi-item highlight-green">
-              <div class="kpi-val" id="rvKpiIdentified">0</div>
-              <div class="kpi-lbl">Identified</div>
-            </div>
-            <div class="kpi-item highlight-amber">
-              <div class="kpi-val" id="rvKpiUnclear">0</div>
-              <div class="kpi-lbl">Unclear</div>
-            </div>
-            <div class="kpi-item">
-              <div class="kpi-val" id="rvKpiAbsent">0</div>
-              <div class="kpi-lbl">Absent</div>
-            </div>
-
-            <div class="submit-box">
-              <button class="btn-submit" id="rvBtnSubmit" onclick="submitAttendanceSession()">Submit</button>
-              <div class="submit-hint" id="rvSubmitHint">Resolve unclear to submit</div>
-            </div>
+          <!-- Review Session Action Button -->
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <button class="btn-submit" id="rvBtnSubmit" onclick="submitAttendanceSession()" style="padding: 10px 24px; font-size: 13px; font-weight: 800; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              Submit Attendance
+            </button>
           </div>
         </div>
 
@@ -805,7 +809,7 @@
 
                 <!-- 5x10 Desk Grid -->
                 <div class="desk-grid-5x10" id="rvDeskGrid">
-                  <!-- Dynamically rendered 50 desks (identified = crop image + green ring, unclear = orange ring + number, absent = blank) -->
+                  <!-- Dynamically rendered 50 desks (identified = crop image + green ring, unclear = orange ring, absent = blank) -->
                 </div>
 
                 <!-- Legend below grid -->
@@ -815,10 +819,8 @@
                     <span>Identified with confidence</span>
                   </div>
                   <div style="display: flex; align-items: center; gap: 6px;">
-                    <span class="legend-ring ring-amber" style="position: relative;">
-                      <span style="position: absolute; top: -5px; right: -5px; background: #d97706; color: #fff; font-size: 8px; width: 10px; height: 10px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold;">1</span>
-                    </span>
-                    <span>Unclear, being tracked</span>
+                    <span class="legend-ring ring-amber"></span>
+                    <span>Under review</span>
                   </div>
                   <div style="margin-left: auto; color: #64748b; font-size: 11px;">
                     Rings follow each person between frames
@@ -826,132 +828,24 @@
                 </div>
               </div>
 
-              <!-- HOW THE NUMBERS ADD UP BREAKDOWN CARD -->
-              <div class="numbers-breakdown-card" style="margin-top: 16px;">
-                <div class="breakdown-title" style="font-size: 12px; font-weight: 800; color: #475569; letter-spacing: 0.5px; margin-bottom: 10px;">HOW THE NUMBERS ADD UP</div>
-                
-                <div class="breakdown-step">
-                  <div class="step-badge">1</div>
-                  <div class="step-desc">
-                    <strong>Count everyone first</strong>
-                    <span class="step-math" id="rvStep1Math">0 enrolled – 0 counted</span>
-                  </div>
-                  <div class="step-result text-green" id="rvStep1Result">= 0 absent</div>
-                </div>
-
-                <div class="breakdown-step">
-                  <div class="step-badge">2</div>
-                  <div class="step-desc">
-                    <strong>Name the faces</strong>
-                    <span class="step-math" id="rvStep2Math">0 counted – 0 identified</span>
-                  </div>
-                  <div class="step-result text-amber" id="rvStep2Result">= 0 still unclear</div>
-                </div>
-
-                <div class="breakdown-step">
-                  <div class="step-badge">3</div>
-                  <div class="step-desc">
-                    <strong>Check the names left</strong>
-                    <span class="step-math" id="rvStep3Math">0 enrolled – 0 identified</span>
-                  </div>
-                  <div class="step-result text-dark" id="rvStep3Result">= 0 names unaccounted</div>
-                </div>
-
-                <div style="font-size: 11px; color: var(--text-muted); font-style: italic; margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--border-light);" id="rvStepSummaryNote">
-                  Unaccounted names = people in the room + absent. Unclear faces are only compared against these.
-                </div>
-              </div>
-
             </div>
           </div>
 
-          <!-- RIGHT COLUMN: NEEDS REVIEW PANEL -->
+          <!-- RIGHT COLUMN: UNDER REVIEW STUDENTS LIST (Simplified & Direct) -->
           <div class="panel-right">
             <div class="card review-card">
               
               <div class="review-header" style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-light); padding-bottom: 12px; margin-bottom: 14px;">
-                <span class="review-title" id="rvNeedsReviewTitle" style="font-size: 13px; font-weight: 800; letter-spacing: 0.5px;">NEEDS REVIEW</span>
-                <div class="segmented-control">
-                  <button class="seg-btn active" id="rvBtnByPerson" onclick="setReviewTabMode('person')">By person</button>
-                  <button class="seg-btn" id="rvBtnByName" onclick="setReviewTabMode('name')">By name</button>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span style="width: 10px; height: 10px; border-radius: 50%; background: #f59e0b; display: inline-block;"></span>
+                  <span class="review-title" id="rvNeedsReviewTitle" style="font-size: 13px; font-weight: 800; letter-spacing: 0.5px;">UNDER REVIEW ATTENDEES (<span id="rvUnderReviewCount">0</span>)</span>
                 </div>
+                <span style="font-size: 11px; color: var(--text-muted); font-weight: 600;">Click name to match photo</span>
               </div>
 
-              <!-- TAB 1: BY PERSON MODE -->
-              <div id="rvPersonTab">
-                
-                <!-- Person Numbered Pager -->
-                <div class="pager-strip">
-                  <div class="pager-buttons" id="rvPersonPagerButtons">
-                    <!-- Dynamically generated buttons [1] [2] [3]... -->
-                  </div>
-                  <div class="pager-caption">People leave this list once they are named</div>
-                </div>
-
-                <!-- Photos of this person Strip / Carousel -->
-                <div class="carousel-container" style="margin-top: 14px;">
-                  <div class="carousel-title" id="rvCropsTitle" style="font-size: 12px; font-weight: 700; color: var(--text-main); margin-bottom: 8px;">
-                    Photos of this person
-                  </div>
-                  <div class="carousel-viewport" style="display: flex; align-items: center; gap: 6px; position: relative;">
-                    <button class="carousel-arrow" onclick="rvCarouselSlide(-1)">‹</button>
-                    <div class="carousel-track" id="rvCropsTrack" style="display: flex; gap: 8px; overflow-x: auto; scroll-behavior: smooth; padding: 4px 2px;">
-                      <!-- Cropped photos from footage -->
-                    </div>
-                    <button class="carousel-arrow" onclick="rvCarouselSlide(1)">›</button>
-                  </div>
-                </div>
-
-                <!-- Tracking Callout Box -->
-                <div class="callout-box tracking-box" style="margin-top: 14px;">
-                  <div class="callout-lead" id="rvTrackingLead">Spatial tracking active</div>
-                  <div class="callout-sub">The camera keeps following this person and marks them automatically as soon as a face is clear.</div>
-                </div>
-
-                <!-- Possible Candidate Names List -->
-                <div class="candidates-section" style="margin-top: 16px;">
-                  <div class="candidates-title" id="rvCandidatesTitle" style="font-size: 11.5px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-                    POSSIBLE NAMES · FROM THE UNACCOUNTED
-                  </div>
-                  <div class="candidate-list" id="rvCandidateCardsList">
-                    <!-- Candidate cards with 'This is them' button & 'Compare Photo' -->
-                  </div>
-                </div>
-
-                <!-- Bottom Actions Strip -->
-                <div class="review-bottom-actions" style="margin-top: 16px; display: flex; gap: 10px;">
-                  <button class="btn-action-secondary" onclick="rvActionNoneOfThese()">None of these</button>
-                  <button class="btn-action-secondary" onclick="rvActionSkipTracking()">Skip and keep tracking</button>
-                </div>
-
-              </div>
-
-              <!-- TAB 2: BY NAME MODE -->
-              <div id="rvNameTab" class="hidden">
-                <div style="font-size: 12px; color: var(--text-muted); margin-bottom: 12px;">
-                  Select any student to match their captured footage photo with their enrolled reference:
-                </div>
-                
-                <!-- Under Review Students Section -->
-                <div style="margin-bottom: 16px;">
-                  <div style="font-size: 11.5px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                    <span style="width: 8px; height: 8px; border-radius: 50%; background: #f59e0b;"></span>
-                    Under Review Attendees (<span id="rvUnderReviewCount">0</span>)
-                  </div>
-                  <div id="rvUnderReviewList" style="display: flex; flex-direction: column; gap: 8px;">
-                    <!-- Dynamically populated under review students -->
-                  </div>
-                </div>
-
-                <!-- Unaccounted / Absent Students Section -->
-                <div>
-                  <div style="font-size: 11.5px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; margin-bottom: 8px;">
-                    Unaccounted / Absent Students (<span id="rvUnaccountedCount">0</span>)
-                  </div>
-                  <div id="rvUnaccountedList" style="display: flex; flex-direction: column; gap: 8px; max-height: 280px; overflow-y: auto;">
-                    <!-- Dynamically populated unaccounted students -->
-                  </div>
-                </div>
+              <!-- List of Under Review Students -->
+              <div id="rvUnderReviewList" style="display: flex; flex-direction: column; gap: 10px; min-height: 220px; max-height: 520px; overflow-y: auto;">
+                <!-- Dynamically populated: student avatar, name, roll no, badge, and click opens modal -->
               </div>
 
             </div>
@@ -1425,8 +1319,8 @@
       <main id="hodSubjectsView" class="view-section">
         <div class="today-hero-header">
           <div>
-            <h1 class="greeting-heading">Department Curriculum & Faculty Subject Assignment</h1>
-            <div class="greeting-subtitle">Define subjects with academic codes and assign them to saved department faculty instructors.</div>
+            <h1 class="greeting-heading">Department Curriculum & Course Management</h1>
+            <div class="greeting-subtitle">Define department curriculum subjects and courses with academic codes, credits, and default classroom venues.</div>
           </div>
         </div>
 
@@ -1434,7 +1328,7 @@
           <!-- Add Subject Form -->
           <div class="card">
             <div class="card-header-flex">
-              <span class="card-title">ADD NEW SUBJECT</span>
+              <span class="card-title">ADD NEW SUBJECT / COURSE</span>
             </div>
             
             <form id="hodAddSubjectForm" onsubmit="handleHodAddSubject(event)" style="margin-top: 14px;">
@@ -1458,20 +1352,13 @@
                 <input type="number" class="form-input" id="subCredits" value="4" min="1" max="6">
               </div>
 
-              <div class="form-group" style="margin-bottom: 12px;">
+              <div class="form-group" style="margin-bottom: 16px;">
                 <label class="form-label">Default Room / Lab</label>
                 <input type="text" class="form-input" id="subRoom" placeholder="e.g. Block B, Lab 2" value="Block B, Room 204">
               </div>
 
-              <div class="form-group" style="margin-bottom: 16px;">
-                <label class="form-label">Assign to Faculty Member *</label>
-                <select class="form-select" id="subFacultySelect" required>
-                  <!-- Populated dynamically from saved faculty -->
-                </select>
-              </div>
-
               <button type="submit" class="btn-action-primary" style="width: 100%; padding: 10px;">
-                Save Subject
+                Save Subject / Course
               </button>
             </form>
           </div>
@@ -1488,8 +1375,8 @@
                 <tr>
                   <th>Code</th>
                   <th>Subject Name</th>
+                  <th>Department</th>
                   <th>Credits</th>
-                  <th>Assigned Faculty</th>
                   <th>Designated Room</th>
                   <th>Action</th>
                 </tr>
@@ -1664,6 +1551,165 @@
           </table>
         </div>
 
+      </main>
+
+      <!-- ============================================================ -->
+      <!-- VIEW: SUBJECT ATTENDANCE RECORD & PDF EXPORT                 -->
+      <!-- ============================================================ -->
+      <main id="recordView" class="view-section">
+        <!-- Hero Header -->
+        <div class="today-hero-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <h1 class="greeting-heading">Subject Attendance Register & Official Records</h1>
+            <div class="greeting-subtitle">Track comprehensive course attendance, monitor student exam eligibility, and export verified records to PDF.</div>
+          </div>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn-action-primary" id="btnExportRecordPdf" onclick="exportSubjectRecordPdf()" style="display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; font-weight: 600;">
+              <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+              Export Official PDF
+            </button>
+            <button class="btn-action-secondary" id="btnPrintRecord" onclick="window.print()" style="display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px;">
+              <svg viewBox="0 0 24 24" style="width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 2;"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+              Print / Preview
+            </button>
+          </div>
+        </div>
+
+        <!-- Filter & Control Toolbar -->
+        <div class="card" style="margin-bottom: 20px; padding: 16px 20px;">
+          <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; justify-content: space-between;">
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; flex: 1; min-width: 300px;">
+              
+              <!-- Subject Dropdown Menu -->
+              <div class="form-group" style="margin: 0; min-width: 260px;">
+                <label class="form-label" style="font-weight: 700; margin-bottom: 6px;">Select Subject / Course</label>
+                <select class="form-select" id="recordSubjectSelect" onchange="handleRecordSubjectChange(this.value)">
+                  <!-- Dynamically populated via app.js -->
+                </select>
+              </div>
+
+              <!-- Class Section Dropdown -->
+              <div class="form-group" style="margin: 0; min-width: 160px;">
+                <label class="form-label" style="font-weight: 700; margin-bottom: 6px;">Class / Section</label>
+                <select class="form-select" id="recordClassSelect" onchange="handleRecordClassChange(this.value)">
+                  <option value="all">All Sections</option>
+                  <option value="CS-3A" selected>CS-3A</option>
+                  <option value="CS-3B">CS-3B</option>
+                  <option value="CSE1">CSE1</option>
+                </select>
+              </div>
+
+              <!-- Search Filter -->
+              <div class="form-group" style="margin: 0; flex: 1; min-width: 200px;">
+                <label class="form-label" style="font-weight: 700; margin-bottom: 6px;">Filter Students</label>
+                <input type="search" class="form-input" id="recordSearchInput" placeholder="Search by name or Roll ID..." oninput="handleRecordSearch(this.value)">
+              </div>
+            </div>
+
+            <div>
+              <button class="btn-action-secondary" onclick="loadRecordPanel()" style="padding: 8px 14px; font-size: 13px;">
+                ↻ Refresh Register
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPI Metrics Grid -->
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 20px;">
+          <div class="card" style="padding: 16px;">
+            <div class="meta-txt" style="text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">Enrolled Students</div>
+            <div id="recordStatTotalStudents" style="font-size: 26px; font-weight: 800; color: #0f172a; margin-top: 4px;">0</div>
+            <div class="meta-txt" style="font-size: 11.5px; margin-top: 2px;">In selected subject & section</div>
+          </div>
+
+          <div class="card" style="padding: 16px;">
+            <div class="meta-txt" style="text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">Classes Conducted</div>
+            <div id="recordStatTotalClasses" style="font-size: 26px; font-weight: 800; color: #2563eb; margin-top: 4px;">0</div>
+            <div class="meta-txt" style="font-size: 11.5px; margin-top: 2px;">Total recorded sessions</div>
+          </div>
+
+          <div class="card" style="padding: 16px;">
+            <div class="meta-txt" style="text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">Average Attendance</div>
+            <div id="recordStatAvgAttendance" style="font-size: 26px; font-weight: 800; color: #16a34a; margin-top: 4px;">0.0%</div>
+            <div class="meta-txt" style="font-size: 11.5px; margin-top: 2px;">Across active roster</div>
+          </div>
+
+          <div class="card" style="padding: 16px;">
+            <div class="meta-txt" style="text-transform: uppercase; font-size: 11px; font-weight: 700; letter-spacing: 0.5px;">Exam Eligibility Status</div>
+            <div style="display: flex; gap: 8px; align-items: baseline; margin-top: 4px;">
+              <span id="recordStatEligibleCount" style="font-size: 22px; font-weight: 800; color: #16a34a;">0</span>
+              <span class="meta-txt" style="font-size: 12px;">Eligible</span>
+              <span style="color: #cbd5e1;">|</span>
+              <span id="recordStatShortageCount" style="font-size: 22px; font-weight: 800; color: #dc2626;">0</span>
+              <span class="meta-txt" style="font-size: 12px;">Shortage</span>
+            </div>
+            <div class="meta-txt" style="font-size: 11px; margin-top: 3px;">Mandatory cutoff: 75%</div>
+          </div>
+        </div>
+
+        <!-- Subject Banner Card -->
+        <div class="card" style="padding: 14px 20px; margin-bottom: 20px; background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%); border-left: 4px solid #2563eb;">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+            <div>
+              <div id="recordSubjectBannerTitle" style="font-size: 16px; font-weight: 800; color: #1e293b;">Loading Subject...</div>
+              <div id="recordSubjectBannerFaculty" class="meta-txt" style="margin-top: 2px; font-size: 12.5px;">Faculty Instructor: Loading...</div>
+            </div>
+            <div style="text-align: right;">
+              <span class="status-pill pill-present" id="recordSubjectBannerMeta">Computer Science Department</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Student Attendance Roster Table -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-header-flex" style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+            <span class="card-title">STUDENT-WISE ATTENDANCE BREAKDOWN</span>
+            <div class="meta-txt" id="recordTableCountNotice">0 students listed</div>
+          </div>
+
+          <table class="enrol-table">
+            <thead>
+              <tr>
+                <th style="width: 50px;">#</th>
+                <th style="width: 140px;">Student ID / Roll No</th>
+                <th>Student Name</th>
+                <th style="width: 100px;">Section</th>
+                <th style="width: 160px; text-align: center;">Attended / Total</th>
+                <th style="width: 180px;">Attendance %</th>
+                <th style="width: 140px; text-align: center;">Eligibility Status</th>
+                <th style="width: 140px; text-align: right;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="recordStudentsTableBody">
+              <!-- Dynamically populated via app.js -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Submitted Sessions History Table -->
+        <div class="card">
+          <div class="card-header-flex" style="padding: 16px 20px; border-bottom: 1px solid #e2e8f0;">
+            <span class="card-title">CONCLUDED ATTENDANCE SESSIONS (SUBMITTED HISTORY)</span>
+            <div class="meta-txt" id="recordSessionsCountNotice">0 sessions</div>
+          </div>
+
+          <table class="enrol-table">
+            <thead>
+              <tr>
+                <th>Session ID</th>
+                <th>Date & Time</th>
+                <th>Section</th>
+                <th>Present Count</th>
+                <th>Absent Count</th>
+                <th>Conducted By</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recordSessionsTableBody">
+              <!-- Dynamically populated via app.js -->
+            </tbody>
+          </table>
+        </div>
       </main>
 
   <!-- ============================================================ -->
@@ -2052,8 +2098,8 @@
             <div class="meta-txt" id="hodStudentInfoMeta">ID: 22CS1047 &bull; Section: CS-3A &bull; Computer Science</div>
           </div>
           <div style="text-align: right;">
-            <div class="status-pill pill-present" id="hodStudentInfoOverallPill" style="font-size: 13px; font-weight: 700;">Overall: 90%</div>
-            <div class="meta-txt" style="margin-top: 2px;">Exam Eligible (≥ 75%)</div>
+            <div class="status-pill pill-present" id="hodStudentInfoOverallPill" style="font-size: 13px; font-weight: 700;">Overall: 0.0%</div>
+            <div class="meta-txt" id="hodStudentInfoEligibilityText" style="margin-top: 2px;">No attendance recorded yet</div>
           </div>
         </div>
 
@@ -2165,10 +2211,38 @@
             </div>
           </div>
 
-          <div class="form-group" style="margin-bottom: 20px;">
+          <div class="form-group" style="margin-bottom: 14px;">
             <label class="form-label">Initial System Password *</label>
             <input type="text" class="form-input" id="newFacultyPassword" value="faculty123" required>
             <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Faculty member can update their credentials in their profile settings.</div>
+          </div>
+
+          <!-- Faculty Security Recovery Setup -->
+          <div style="margin-bottom: 20px; padding: 12px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0;">
+            <div style="font-size: 11.5px; font-weight: 700; color: #334155; margin-bottom: 8px; text-transform: uppercase; display: flex; align-items: center; gap: 6px;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              Faculty Security & Password Recovery Setup
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 10px;">
+              <div class="form-group">
+                <label class="form-label" style="font-size: 11px;">Security Question 1 *</label>
+                <input type="text" class="form-input" id="newFacultySecQ1" value="What is your primary academic department?" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size: 11px;">Security Answer 1 *</label>
+                <input type="text" class="form-input" id="newFacultySecA1" value="Computer Science" required>
+              </div>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+              <div class="form-group">
+                <label class="form-label" style="font-size: 11px;">Security Question 2 *</label>
+                <input type="text" class="form-input" id="newFacultySecQ2" value="What is your university security code?" required>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="font-size: 11px;">Security Answer 2 *</label>
+                <input type="text" class="form-input" id="newFacultySecA2" value="2026" required>
+              </div>
+            </div>
           </div>
 
           <div style="display: flex; justify-content: flex-end; gap: 10px;">
@@ -2176,6 +2250,61 @@
             <button type="submit" class="btn-action-primary" style="display: inline-flex; align-items: center; gap: 6px;">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               Add Faculty
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- EDIT FACULTY SECURITY QUESTIONS MODAL (HOD Governance)       -->
+  <!-- ============================================================ -->
+  <div class="modal-backdrop hidden" id="editFacultySecurityModal">
+    <div class="modal-card" style="max-width: 520px; background: #ffffff; color: #182026; border-radius: 12px; box-shadow: 0 25px 50px rgba(0,0,0,0.3); border: 1px solid #d0d7de;">
+      <div class="modal-header" style="background: #f8fafc; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+        <div>
+          <h2 class="modal-title" style="font-size: 16px; font-weight: 700; color: #0f172a; margin: 0;">Edit Faculty Security Recovery Questions</h2>
+          <div class="modal-subtitle" style="font-size: 12px; color: #64748b; margin-top: 2px;" id="editFacultySecuritySubtitle">Update security questions & answers for password recovery</div>
+        </div>
+        <button class="btn-close-modal" onclick="closeEditFacultySecurityModal()">✕</button>
+      </div>
+
+      <div class="modal-body" style="padding: 20px; background: #ffffff;">
+        <form id="editFacultySecurityForm" onsubmit="handleSaveFacultySecurity(event)">
+          <input type="hidden" id="editSecEmpId">
+          <div class="form-group" style="margin-bottom: 14px;">
+            <label class="form-label">Faculty Member</label>
+            <input type="text" class="form-input" id="editSecFacultyName" readonly style="background: #f1f5f9; cursor: not-allowed; font-weight: 600;">
+          </div>
+
+          <div style="background: #f8fafc; border-radius: 8px; padding: 12px; border: 1px solid #e2e8f0; margin-bottom: 14px;">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label">Security Question 1 *</label>
+              <input type="text" class="form-input" id="editSecQ1" placeholder="e.g. What is your primary academic department?" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Security Answer 1 *</label>
+              <input type="text" class="form-input" id="editSecA1" placeholder="Enter answer for Question 1" required>
+            </div>
+          </div>
+
+          <div style="background: #f8fafc; border-radius: 8px; padding: 12px; border: 1px solid #e2e8f0; margin-bottom: 18px;">
+            <div class="form-group" style="margin-bottom: 10px;">
+              <label class="form-label">Security Question 2 *</label>
+              <input type="text" class="form-input" id="editSecQ2" placeholder="e.g. What is your university security code?" required>
+            </div>
+            <div class="form-group">
+              <label class="form-label">Security Answer 2 *</label>
+              <input type="text" class="form-input" id="editSecA2" placeholder="Enter answer for Question 2" required>
+            </div>
+          </div>
+
+          <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button type="button" class="btn-action-secondary" onclick="closeEditFacultySecurityModal()">Cancel</button>
+            <button type="submit" class="btn-action-primary" style="display: inline-flex; align-items: center; gap: 6px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Save Security Q&A
             </button>
           </div>
         </form>
@@ -2212,10 +2341,10 @@
       </div>
 
       <!-- SIGN IN FORM -->
-      <form id="portalLoginForm" onsubmit="handleLoginSubmit(event)">
+      <form id="portalLoginForm" action="javascript:void(0);" onsubmit="event.preventDefault(); handleLoginSubmit(event); return false;">
         <div class="form-group" style="margin-bottom: 16px;">
           <label class="form-label" style="font-size: 11.5px; font-weight: 700; text-transform: uppercase; color: #475569; letter-spacing: 0.5px;">User ID / Username</label>
-          <input type="text" class="form-input" id="loginUserId" placeholder="User ID" value="" required autocomplete="username" style="width: 100%; padding: 10px 14px; font-size: 13.5px; border-radius: 8px;">
+          <input type="text" class="form-input" id="loginUserId" placeholder="User ID (e.g. FAC0011)" value="" required autocomplete="username" style="width: 100%; padding: 10px 14px; font-size: 13.5px; border-radius: 8px;">
         </div>
 
         <div class="form-group" style="margin-bottom: 16px; display: none;">
@@ -2242,7 +2371,7 @@
           </div>
         </div>
 
-        <button type="submit" class="btn-login-submit" id="btnLoginSubmit">
+        <button type="button" onclick="handleLoginSubmit(event)" class="btn-login-submit" id="btnLoginSubmit" style="width: 100%; padding: 11px; font-size: 14px; font-weight: 700;">
           Sign In
         </button>
       </form>
@@ -2271,19 +2400,19 @@
         <form id="forgotPasswordForm" onsubmit="handleForgotPasswordSubmit(event)">
           <div class="form-group" style="margin-bottom: 12px;">
             <label class="form-label">User ID *</label>
-            <input type="text" class="form-input" id="fpUserId" placeholder="Enter your User ID" required>
+            <input type="text" class="form-input" id="fpUserId" placeholder="Enter your User ID" oninput="handleFpUserChange(this.value)" required>
           </div>
 
           <div class="form-group" style="margin-bottom: 12px;">
             <label class="form-label">Security Question 1</label>
-            <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">What is your primary academic department?</div>
-            <input type="text" class="form-input" id="fpAnswer1" placeholder="Enter primary department name" required>
+            <div id="fpQuestion1Label" style="font-size: 12px; color: #475569; margin-bottom: 4px; font-weight: 500;">What is your primary academic department?</div>
+            <input type="text" class="form-input" id="fpAnswer1" placeholder="Enter answer for Question 1" required>
           </div>
 
           <div class="form-group" style="margin-bottom: 12px;">
             <label class="form-label">Security Question 2</label>
-            <div style="font-size: 12px; color: #475569; margin-bottom: 4px;">What is your college security code?</div>
-            <input type="text" class="form-input" id="fpAnswer2" placeholder="Enter college security code" required>
+            <div id="fpQuestion2Label" style="font-size: 12px; color: #475569; margin-bottom: 4px; font-weight: 500;">What is your college security code?</div>
+            <input type="text" class="form-input" id="fpAnswer2" placeholder="Enter answer for Question 2" required>
           </div>
 
           <div class="form-group" style="margin-bottom: 16px;">
@@ -2402,11 +2531,11 @@
       <!-- Student Header Bar -->
       <div style="background: var(--bg-card); border: 1px solid var(--border-light); border-radius: 8px; padding: 12px 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: center;">
         <div style="display: flex; align-items: center; gap: 12px;">
-          <div class="avatar-circle" id="svmStudentAvatar" style="width: 42px; height: 42px; font-size: 16px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-radius: 50%; display: flex; align-items: center; justify-content: center;">KM</div>
+          <div class="avatar-circle" id="svmStudentAvatar" style="width: 42px; height: 42px; font-size: 16px; font-weight: 700; background: #e0f2fe; color: #0369a1; border-radius: 50%; display: flex; align-items: center; justify-content: center;">--</div>
           <div>
-            <div style="font-size: 15px; font-weight: 800; color: var(--text-main);" id="svmStudentName">Karan Mehta</div>
+            <div style="font-size: 15px; font-weight: 800; color: var(--text-main);" id="svmStudentName">Student Profile</div>
             <div style="font-size: 12px; color: var(--text-muted);">
-              ID: <strong style="color: var(--text-main);" id="svmStudentId">22CS1038</strong> · Section <span id="svmStudentSection">CS-3A</span>
+              ID: <strong style="color: var(--text-main);" id="svmStudentId">--</strong> · Section <span id="svmStudentSection">CSE 3</span>
             </div>
           </div>
         </div>

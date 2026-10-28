@@ -126,6 +126,7 @@ function switchView(viewId) {
     else if (viewId === "hodSubjectsView") pageTag.textContent = "Curriculum Governance · Subjects & Faculty Assignment";
     else if (viewId === "hodFacultyView") pageTag.textContent = "Faculty Directory · Timetables & Workloads";
     else if (viewId === "hodClassesView") pageTag.textContent = "Class Sections & Weekly Master Timetable";
+    else if (viewId === "recordView") pageTag.textContent = "Attendance Record · Subject Register & Official PDF";
   }
 
   // View-specific initializations and Camera Lifecycle Management
@@ -184,6 +185,11 @@ function switchView(viewId) {
       poseStream.src = `${API_BASE}/api/video_feed?source=0&t=${Date.now()}`;
     }
     renderTrainingView();
+  } else if (viewId === "recordView") {
+    if (streamImg) streamImg.src = "";
+    if (enrolStream) enrolStream.src = "";
+    if (poseStream) poseStream.src = "";
+    loadRecordPanel();
   } else {
     // Other views: pause camera feeds
     if (streamImg) streamImg.src = "";
@@ -210,71 +216,24 @@ function jumpToReviewQueue() {
 window.jumpToReviewQueue = jumpToReviewQueue;
 
 // ==========================================================================
-// DEDICATED REVIEW QUEUE & CAPTURED GRID VIEW ENGINE
+// DEDICATED REVIEW QUEUE & CAPTURED GRID VIEW ENGINE (OPTIMIZED)
 // ==========================================================================
-state.activeReviewPersonIndex = 0;
-state.reviewTabMode = "person"; // "person" or "name"
 state.pendingVerification = null;
-
-function initDefaultUnclearPersons() {
-  const candidatePool = [
-    { id: "22CS1038", name: "Karan Mehta", rating: "Strong", dots: "●●●", cls: "strong", score: "88.5%" },
-    { id: "22CS1044", name: "Simran Kaur", rating: "Fair", dots: "●●○", cls: "fair", score: "74.2%" },
-    { id: "22CS1059", name: "Dev Patel", rating: "Weak", dots: "●○○", cls: "weak", score: "61.0%" },
-    { id: "2333407", name: "Rohit Kumar Mahata", rating: "Strong", dots: "●●●", cls: "strong", score: "94.8%" },
-    { id: "2333438", name: "Sudeep Singh Dhami", rating: "Fair", dots: "●●○", cls: "fair", score: "78.4%" },
-    { id: "2333423", name: "Saurabh Singh", rating: "Strong", dots: "●●●", cls: "strong", score: "86.0%" }
-  ];
-
-  // Specific grid positions matching reference screenshot:
-  // 1: (1,7), 2: (2,3), 3: (3,8), 4: (4,5), 5: (5,2), 6: (5,9)
-  const seats = [
-    { row: 1, col: 7 },
-    { row: 2, col: 3 },
-    { row: 3, col: 8 },
-    { row: 4, col: 5 },
-    { row: 5, col: 2 },
-    { row: 5, col: 9 }
-  ];
-
-  state.unclearPersons = seats.map((seat, i) => {
-    const cand = candidatePool[i % candidatePool.length];
-    return {
-      id: i + 1,
-      studentId: cand.id,
-      studentName: cand.name,
-      seat: seat,
-      seatLabel: `row ${seat.row}, seat ${seat.col}`,
-      trackingText: `Still tracking · row ${seat.row}, seat ${seat.col} · followed in 14 of 16 frames`,
-      crops: [
-        { time: "09:02", note: "Too dark", best: false },
-        { time: "09:04", note: "Blurred", best: false },
-        { time: "09:05", note: "Turned away", best: false },
-        { time: "09:07", note: "Partly hidden", best: false },
-        { time: "09:08", note: "Best so far", best: true }
-      ],
-      candidates: [
-        candidatePool[i % candidatePool.length],
-        candidatePool[(i + 1) % candidatePool.length],
-        candidatePool[(i + 2) % candidatePool.length]
-      ]
-    };
-  });
-}
 
 function renderReviewWorkspace() {
   if (!state.rosterData || state.rosterData.length === 0) {
-    if (state.students && state.students.length > 0) {
-      processStudentRoster();
-    }
+    if (state.students && state.students.length > 0) processStudentRoster();
   }
 
-  if (!state.unclearPersons || state.unclearPersons.length === 0) {
-    initDefaultUnclearPersons();
-  }
-
-  // Update session meta header
+  // Active session and section details
   const sess = state.session || {};
+  const courseName = state.selectedSubject?.name || sess.course_name || sess.course || "Data Science";
+  const courseCode = state.selectedSubject?.code || sess.course_code || "AGCS2102";
+  const sectionCode = state.selectedClass || sess.division || sess.section || "CSE 3";
+  const roomName = state.selectedSubject?.room || sess.room || sess.room_code || "Block B, Lab 3";
+  const timeSlot = state.selectedSubject?.time_slot || sess.time || sess.time_slot || "09:00 - 10:00";
+
+  // Header Elements
   const breadcrumb = document.getElementById("rvSessionBreadcrumb");
   const title = document.getElementById("rvSessionTitle");
   const roomTime = document.getElementById("rvSessionRoomTime");
@@ -282,369 +241,181 @@ function renderReviewWorkspace() {
   const badge = document.getElementById("rvSnapshotBadge");
   const metaLabel = document.getElementById("rvDeskMetaLabel");
 
-  const courseCode = sess.course_code || "CS-2104";
-  const courseName = sess.course_name || sess.course || "Data Structures";
-  const roomName = sess.room || sess.room_code || "Block B, Lab 3";
-  const timeSlot = sess.time || "09:00 – 10:00";
+  if (breadcrumb) breadcrumb.textContent = `Attendance › ${sectionCode} / ${courseName}`;
+  if (title) title.textContent = `${courseName} · Section ${sectionCode}`;
+  if (roomTime) roomTime.textContent = `${roomName} · Section ${sectionCode} · ${timeSlot}`;
+  if (badge) badge.textContent = `Snapshot ${new Date().toTimeString().split(" ")[0]}`;
 
-  if (breadcrumb) breadcrumb.textContent = `Attendance › ${courseCode} › Session Active`;
-  if (title) title.textContent = `${courseCode} · ${courseName}`;
-  if (roomTime) roomTime.textContent = `${roomName} · ${timeSlot}`;
-  if (statusTxt) statusTxt.textContent = `Still tracking ${state.unclearPersons.length} people`;
-  if (badge) {
-    const now = new Date();
-    const timeStr = now.toTimeString().split(" ")[0];
-    badge.textContent = `Snapshot ${timeStr}`;
+  // 1. REAL STUDENTS PRESENT & UNDER REVIEW IN ACTIVE SECTION
+  const presentStudents = (state.rosterData || []).filter(s => s.status === "Present");
+  const underReviewStudents = (state.unclearPersons && state.unclearPersons.length > 0)
+    ? state.unclearPersons
+    : (state.rosterData || []).filter(s => s.status === "Under review");
+
+  const countInRoom = presentStudents.length + underReviewStudents.length;
+
+  if (statusTxt) {
+    statusTxt.textContent = underReviewStudents.length > 0 
+      ? `Tracking ${underReviewStudents.length} attendee${underReviewStudents.length > 1 ? 's' : ''} for review` 
+      : "All attendees confirmed";
   }
-
-  // Synchronize KPIs
-  const totalEnrolled = state.rosterData.length || state.enrolled || 60;
-  state.enrolled = totalEnrolled;
-
-  // Ensure initial verified cohort matches reference screenshot if all are currently blank
-  const presentStudents = state.rosterData.filter(s => s.status === "Present");
-  if (presentStudents.length === 0 && state.rosterData.length > 0) {
-    const numToMark = Math.min(44, state.rosterData.length - state.unclearPersons.length);
-    for (let i = 0; i < numToMark; i++) {
-      state.rosterData[i].status = "Present";
-      state.rosterData[i].method = "Camera";
-      state.rosterData[i].time = "09:00";
-    }
-  }
-
-  state.identified = state.rosterData.filter(s => s.status === "Present").length;
-  state.unclearCount = state.unclearPersons.length;
-  state.counted = state.identified + state.unclearCount;
-  state.absent = Math.max(0, state.enrolled - state.counted);
-
   if (metaLabel) {
-    metaLabel.textContent = `${state.counted} people counted · 5 rows of 10`;
+    metaLabel.textContent = `${countInRoom} people counted · 5 rows of 10 desks`;
   }
 
-  const kpiEnrolled = document.getElementById("rvKpiEnrolled");
-  const kpiCounted = document.getElementById("rvKpiCounted");
-  const kpiIdentified = document.getElementById("rvKpiIdentified");
-  const kpiUnclear = document.getElementById("rvKpiUnclear");
-  const kpiAbsent = document.getElementById("rvKpiAbsent");
-  const submitHint = document.getElementById("rvSubmitHint");
-
-  if (kpiEnrolled) kpiEnrolled.textContent = state.enrolled;
-  if (kpiCounted) kpiCounted.textContent = state.counted;
-  if (kpiIdentified) kpiIdentified.textContent = state.identified;
-  if (kpiUnclear) kpiUnclear.textContent = state.unclearCount;
-  if (kpiAbsent) kpiAbsent.textContent = state.absent;
-  if (submitHint) {
-    submitHint.textContent = state.unclearCount > 0 
-      ? `Resolve ${state.unclearCount} to submit` 
-      : "Ready to submit attendance";
-  }
-
-  // Update HOW THE NUMBERS ADD UP cards
-  const step1Math = document.getElementById("rvStep1Math");
-  const step1Res = document.getElementById("rvStep1Result");
-  const step2Math = document.getElementById("rvStep2Math");
-  const step2Res = document.getElementById("rvStep2Result");
-  const step3Math = document.getElementById("rvStep3Math");
-  const step3Res = document.getElementById("rvStep3Result");
-  const stepSummary = document.getElementById("rvStepSummaryNote");
-
-  const unaccounted = state.enrolled - state.identified;
-
-  if (step1Math) step1Math.textContent = `${state.enrolled} enrolled – ${state.counted} counted`;
-  if (step1Res) step1Res.textContent = `= ${state.absent} absent`;
-
-  if (step2Math) step2Math.textContent = `${state.counted} counted – ${state.identified} identified`;
-  if (step2Res) step2Res.textContent = `= ${state.unclearCount} still unclear`;
-
-  if (step3Math) step3Math.textContent = `${state.enrolled} enrolled – ${state.identified} identified`;
-  if (step3Res) step3Res.textContent = `= ${unaccounted} names unaccounted`;
-
-  if (stepSummary) {
-    stepSummary.textContent = `${unaccounted} unaccounted names = ${state.unclearCount} people in the room + ${state.absent} absent. Unclear faces are only compared against these.`;
-  }
-
-  // Render Seating Grid
-  renderReviewDeskGrid();
-
-  // Render Side Panel
-  renderReviewSidePanel();
+  // 2. RENDER 5x10 SEATING GRID & UNDER REVIEW LIST
+  renderReviewDeskGrid(presentStudents, underReviewStudents, 50);
+  renderUnderReviewList(underReviewStudents);
 }
 window.renderReviewWorkspace = renderReviewWorkspace;
 
-function renderReviewDeskGrid() {
+function renderReviewDeskGrid(presentStudents, underReviewStudents, totalSection = 50) {
   const grid = document.getElementById("rvDeskGrid");
   if (!grid) return;
   grid.innerHTML = "";
 
-  const activePerson = state.unclearPersons[state.activeReviewPersonIndex] || null;
-  const presentStudents = state.rosterData.filter(s => s.status === "Present");
   let presentIdx = 0;
+  let unclearIdx = 0;
 
-  for (let r = 1; r <= 5; r++) {
-    for (let c = 1; c <= 10; c++) {
-      const cell = document.createElement("div");
-      cell.className = "desk-cell-box";
-      cell.setAttribute("data-row", r);
-      cell.setAttribute("data-col", c);
+  for (let desk = 0; desk < totalSection; desk++) {
+    const row = Math.floor(desk / 10) + 1;
+    const col = (desk % 10) + 1;
 
-      // Check if this seat is an unclear person
-      const unclearPerson = state.unclearPersons.find(p => p.seat.row === r && p.seat.col === c);
+    const cell = document.createElement("div");
+    cell.className = "desk-cell-box";
+    cell.setAttribute("data-row", row);
+    cell.setAttribute("data-col", col);
 
-      if (unclearPerson) {
-        if (activePerson && unclearPerson.id === activePerson.id) {
-          cell.classList.add("active-person");
-        }
+    if (presentIdx < presentStudents.length) {
+      // 1. PRESENT STUDENT: Cropped photo from footage with green ring
+      const student = presentStudents[presentIdx++];
+      const circle = document.createElement("div");
+      circle.className = "desk-avatar-circle identified";
 
-        const ring = document.createElement("div");
-        ring.className = "desk-avatar-circle unclear";
-
-        const numPill = document.createElement("span");
-        numPill.className = "desk-number-pill";
-        numPill.textContent = unclearPerson.id;
-
-        cell.appendChild(ring);
-        cell.appendChild(numPill);
-        cell.title = `Person ${unclearPerson.id}: Under Review · Seated at row ${r}, seat ${c}. Click to match photo!`;
-
-        cell.onclick = () => {
-          const pIdx = state.unclearPersons.findIndex(p => p.id === unclearPerson.id);
-          if (pIdx !== -1) {
-            selectReviewPerson(pIdx);
-            openVerificationModal(unclearPerson.studentId, unclearPerson.id);
-          }
+      const img = document.createElement("img");
+      img.className = "desk-avatar-img";
+      img.alt = student.name;
+      img.src = `/api/crops/${student.id}_live.jpg`;
+      img.onerror = function() {
+        this.onerror = function() {
+          this.style.display = "none";
+          circle.textContent = (student.name || "ST").split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
+          circle.style.cssText = "font-size: 11px; font-weight: 700; color: #22c55e;";
         };
-      } else {
-        // Identified student or absent desk
-        if (presentIdx < presentStudents.length) {
-          const student = presentStudents[presentIdx];
-          presentIdx++;
+        this.src = `/api/crops/${student.id}_front_1.jpg`;
+      };
 
-          const avatarCircle = document.createElement("div");
-          avatarCircle.className = "desk-avatar-circle identified";
+      circle.appendChild(img);
+      cell.appendChild(circle);
+      cell.title = `${student.name} (${student.id}) · Present`;
+      cell.onclick = () => openVerificationModal(student.id);
 
-          const img = document.createElement("img");
-          img.className = "desk-avatar-img";
-          img.alt = student.name;
-          img.src = `/api/crops/${student.id}_live.jpg`;
-          img.onerror = function() {
-            this.onerror = function() {
-              this.style.display = "none";
-              avatarCircle.textContent = student.name ? student.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "ID";
-              avatarCircle.style.fontSize = "11px";
-              avatarCircle.style.fontWeight = "700";
-              avatarCircle.style.color = "#22c55e";
-            };
-            this.src = `/api/crops/${student.id}_front_1.jpg`;
-          };
+    } else if (unclearIdx < underReviewStudents.length) {
+      // 2. UNDER REVIEW STUDENT: Orange ring, interior blank
+      const unclear = underReviewStudents[unclearIdx++];
+      const circle = document.createElement("div");
+      circle.className = "desk-avatar-circle unclear";
 
-          avatarCircle.appendChild(img);
-          cell.appendChild(avatarCircle);
-          cell.title = `${student.name} (${student.id}) · Present`;
-          cell.onclick = () => {
-            openVerificationModal(student.id, null);
-          };
-        } else {
-          // Absent / empty seat: completely blank!
-          cell.classList.add("blank");
-          cell.title = `Desk row ${r}, seat ${c} · Absent / Blank`;
-        }
-      }
+      cell.appendChild(circle);
+      cell.title = `${unclear.studentName || unclear.name || 'Student'}: Under Review. Click to match photo!`;
+      cell.onclick = () => openVerificationModal(unclear.studentId || unclear.id);
 
-      grid.appendChild(cell);
+    } else {
+      // 3. ABSENT / EMPTY DESK: Blank
+      cell.classList.add("blank");
+      cell.title = `Desk ${row}-${col}: Absent / Blank`;
     }
+
+    grid.appendChild(cell);
   }
 }
 
-function renderReviewSidePanel() {
-  const personTab = document.getElementById("rvPersonTab");
-  const titleEl = document.getElementById("rvNeedsReviewTitle");
+function renderUnderReviewList(underReviewStudents) {
+  const container = document.getElementById("rvUnderReviewList");
+  const countBadge = document.getElementById("rvUnderReviewCount");
+  if (!container) return;
+  container.innerHTML = "";
 
-  if (state.unclearPersons.length === 0) {
-    if (titleEl) titleEl.textContent = "REVIEW QUEUE · COMPLETED";
-    if (personTab) {
-      personTab.innerHTML = `
-        <div style="text-align: center; padding: 40px 16px;">
-          <div style="font-size: 38px; margin-bottom: 10px;">🎉</div>
-          <h4 style="font-size: 15px; font-weight: 800; color: #166534;">All Unclear Attendees Resolved!</h4>
-          <p style="font-size: 12px; color: var(--text-muted); margin: 6px 0 16px 0;">
-            All ${state.identified} present students have been identified and confirmed in the classroom grid.
-          </p>
-          <button class="btn-action-primary" onclick="submitAttendanceSession()" style="padding: 10px 24px; font-size: 13.5px; font-weight: 700;">
-            Submit Official Attendance
-          </button>
+  if (countBadge) countBadge.textContent = underReviewStudents.length;
+
+  if (underReviewStudents.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 48px 16px; color: var(--text-muted);">
+        <div style="font-size: 32px; margin-bottom: 8px;">✓</div>
+        <div style="font-weight: 700; color: #166534; font-size: 14px;">No Students Under Review</div>
+        <div style="font-size: 11.5px; margin-top: 4px; color: #64748b;">
+          All detected attendees in the room have been identified and confirmed.
         </div>
-      `;
-    }
+      </div>
+    `;
     return;
   }
 
-  if (state.activeReviewPersonIndex >= state.unclearPersons.length) {
-    state.activeReviewPersonIndex = 0;
-  }
+  underReviewStudents.forEach((student, idx) => {
+    const sId = student.studentId || student.id;
+    const sName = student.studentName || student.name || `Attendee ${idx + 1}`;
+    const initials = sName.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
 
-  const activePerson = state.unclearPersons[state.activeReviewPersonIndex];
-  if (titleEl) {
-    titleEl.textContent = `NEEDS REVIEW · PERSON ${activePerson.id} OF ${state.unclearPersons.length}`;
-  }
+    const card = document.createElement("div");
+    card.style.cssText = `
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px; background: #ffffff; border: 1.5px solid #fde68a;
+      border-radius: 8px; cursor: pointer; transition: all 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    `;
+    card.onmouseenter = () => { card.style.borderColor = "#f59e0b"; card.style.background = "#fffbeb"; };
+    card.onmouseleave = () => { card.style.borderColor = "#fde68a"; card.style.background = "#ffffff"; };
+    card.onclick = () => openVerificationModal(sId);
 
-  // 1. Pager Buttons
-  const pagerStrip = document.getElementById("rvPersonPagerButtons");
-  if (pagerStrip) {
-    pagerStrip.innerHTML = "";
-    state.unclearPersons.forEach((p, idx) => {
-      const btn = document.createElement("button");
-      btn.className = `pager-btn ${idx === state.activeReviewPersonIndex ? "active" : ""}`;
-      btn.textContent = p.id;
-      btn.onclick = () => selectReviewPerson(idx);
-      pagerStrip.appendChild(btn);
-    });
-  }
-
-  // 2. Carousel of footage crops
-  const cropsTitle = document.getElementById("rvCropsTitle");
-  if (cropsTitle) {
-    cropsTitle.textContent = `Photos of this person, 5 from the last 8 minutes`;
-  }
-  const track = document.getElementById("rvCropsTrack");
-  if (track) {
-    track.innerHTML = "";
-    activePerson.crops.forEach(c => {
-      const card = document.createElement("div");
-      card.className = "crop-card";
-      card.style.cssText = "min-width: 80px; flex-shrink: 0; text-align: center;";
-      card.innerHTML = `
-        <div class="crop-img-box ${c.best ? 'best-frame' : ''}" style="width: 80px; height: 95px; background: #1e293b; border-radius: 6px; overflow: hidden; margin: 0 auto;">
-          <img src="/api/crops/${activePerson.studentId}_${c.time.replace(':', '')}.jpg" 
-               onerror="this.onerror=null; this.src='/api/crops/unclear_live.jpg';" 
+    card.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <div style="width: 38px; height: 38px; border-radius: 50%; overflow: hidden; background: #1e293b; border: 2px solid #f59e0b; flex-shrink: 0; display: flex; align-items: center; justify-content: center;">
+          <img src="/api/crops/${sId}_live.jpg" 
+               onerror="this.onerror=function(){this.style.display='none';}; this.src='/api/crops/unclear_live.jpg';" 
                style="width: 100%; height: 100%; object-fit: cover;">
+          <span style="font-size: 12px; font-weight: 700; color: #f59e0b;">${initials}</span>
         </div>
-        <div class="crop-time" style="font-size: 11px; font-weight: 700; margin-top: 4px;">${c.time}</div>
-        <div class="crop-note ${c.best ? 'best' : ''}" style="font-size: 10.5px; color: ${c.best ? '#15803d' : '#64748b'}; font-weight: ${c.best ? '700' : '500'};">${c.note}</div>
-      `;
-      track.appendChild(card);
-    });
-  }
-
-  // 3. Tracking callout
-  const trackLead = document.getElementById("rvTrackingLead");
-  if (trackLead) {
-    trackLead.textContent = activePerson.trackingText || `Still tracking · row ${activePerson.seat.row}, seat ${activePerson.seat.col} · followed in 14 of 16 frames`;
-  }
-
-  // 4. Candidate cards
-  const candList = document.getElementById("rvCandidateCardsList");
-  if (candList) {
-    candList.innerHTML = "";
-    (activePerson.candidates || []).forEach(cand => {
-      const initials = cand.name ? cand.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "ST";
-      const card = document.createElement("div");
-      card.className = "candidate-item";
-      card.style.cssText = "display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border-light); border-radius: 8px; margin-bottom: 8px; background: #ffffff; cursor: pointer;";
-      card.onclick = () => openVerificationModal(cand.id, activePerson.id);
-
-      card.innerHTML = `
-        <div class="candidate-avatar" style="width: 36px; height: 36px; border-radius: 50%; background: #e0f2fe; color: #0284c7; font-weight: 700; font-size: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          ${initials}
+        <div>
+          <div style="font-size: 14px; font-weight: 700; color: #1e293b; text-decoration: underline; text-underline-offset: 2px;">
+            ${sName}
+          </div>
+          <div style="font-size: 11.5px; color: #64748b; margin-top: 2px;">
+            Roll No / ID: <strong style="color: #0f172a;">${sId}</strong> · Click to compare
+          </div>
         </div>
-        <div class="candidate-info" style="flex: 1;">
-          <div class="candidate-name" style="font-size: 13.5px; font-weight: 700; color: #0f172a;">${cand.name}</div>
-          <div class="candidate-meta" style="font-size: 11.5px; color: #64748b;">${cand.id} · ID photo on file</div>
-        </div>
-        <div class="candidate-score-dots ${cand.cls || 'strong'}" style="margin-right: 6px; font-size: 11.5px; font-weight: 600;">
-          <span>${cand.dots || '●●●'}</span>
-          <span>${cand.rating || 'Strong'}</span>
-        </div>
-        <button class="btn-confirm" onclick="event.stopPropagation(); openVerificationModal('${cand.id}', ${activePerson.id})" style="background: #15803d; color: #ffffff; border: none; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 6px; cursor: pointer;">
-          This is them
-        </button>
-      `;
-      candList.appendChild(card);
-    });
-  }
+      </div>
+      <button class="btn-sm" style="background: #f59e0b; color: #ffffff; border: none; font-size: 11.5px; font-weight: 700; padding: 6px 12px; border-radius: 6px; cursor: pointer;">
+        Compare Photo
+      </button>
+    `;
 
-  renderReviewByNameTab();
+    container.appendChild(card);
+  });
 }
 
-function renderReviewByNameTab() {
-  const urCount = document.getElementById("rvUnderReviewCount");
-  const urList = document.getElementById("rvUnderReviewList");
-  const unaccCount = document.getElementById("rvUnaccountedCount");
-  const unaccList = document.getElementById("rvUnaccountedList");
+function openVerificationModal(studentId) {
+  const student = (state.rosterData || []).find(s => s.id === studentId) ||
+                  (state.students || []).find(s => (s.student_id === studentId || s.id === studentId)) ||
+                  { name: "Student", id: studentId, division: "CSE 3" };
 
-  if (urCount) urCount.textContent = state.unclearPersons.length;
-  if (urList) {
-    urList.innerHTML = "";
-    state.unclearPersons.forEach(p => {
-      const card = document.createElement("div");
-      card.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; cursor: pointer;";
-      card.onclick = () => openVerificationModal(p.studentId, p.id);
-      card.innerHTML = `
-        <div>
-          <div style="font-size: 13px; font-weight: 700; color: #92400e;">${p.studentName}</div>
-          <div style="font-size: 11px; color: #b45309;">ID: ${p.studentId} · Seated at ${p.seatLabel}</div>
-        </div>
-        <button class="btn-sm" style="background: #d97706; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; font-weight: 700;">
-          Match Photo
-        </button>
-      `;
-      urList.appendChild(card);
-    });
-  }
-
-  const absentList = state.rosterData.filter(s => s.status === "Absent");
-  if (unaccCount) unaccCount.textContent = absentList.length;
-  if (unaccList) {
-    unaccList.innerHTML = "";
-    absentList.forEach(s => {
-      const card = document.createElement("div");
-      card.style.cssText = "display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-bottom: 1px solid var(--border-subtle); font-size: 12px;";
-      card.innerHTML = `
-        <div>
-          <span style="font-weight: 600; color: var(--text-main);">${s.name}</span>
-          <span style="color: var(--text-muted); font-size: 11px; margin-left: 6px;">${s.id}</span>
-        </div>
-        <button class="btn-action-secondary" onclick="openVerificationModal('${s.id}', null)" style="padding: 2px 8px; font-size: 10.5px;">
-          Verify Photo
-        </button>
-      `;
-      unaccList.appendChild(card);
-    });
-  }
-}
-
-function openVerificationModal(studentId, personId) {
-  const student = state.rosterData.find(s => s.id === studentId) || 
-                  state.students.find(s => (s.student_id === studentId || s.id === studentId)) ||
-                  { name: "Student", id: studentId, division: "CS-3A" };
-
-  state.pendingVerification = {
-    studentId: studentId,
-    personId: personId
-  };
+  state.pendingVerificationStudentId = studentId;
 
   const nameEl = document.getElementById("svmStudentName");
   const idEl = document.getElementById("svmStudentId");
   const secEl = document.getElementById("svmStudentSection");
   const avatarEl = document.getElementById("svmStudentAvatar");
   const scoreBadge = document.getElementById("svmMatchScoreBadge");
-  const seatLabel = document.getElementById("svmFootageSeatLabel");
   const probeImg = document.getElementById("svmProbeImg");
   const refImg = document.getElementById("svmRefImg");
 
   if (nameEl) nameEl.textContent = student.name;
   if (idEl) idEl.textContent = student.id || student.student_id;
-  if (secEl) secEl.textContent = student.section || student.division || "CS-3A";
+  if (secEl) secEl.textContent = student.section || student.division || "CSE 3";
   if (avatarEl) {
-    const inits = student.name ? student.name.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase() : "ST";
-    avatarEl.textContent = inits;
+    avatarEl.textContent = (student.name || "ST").split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
   }
   if (scoreBadge) {
-    scoreBadge.textContent = student.confidence ? `${student.confidence}% Match` : "88.5% Match";
-  }
-
-  const unclearPerson = personId ? state.unclearPersons.find(p => p.id === personId) : null;
-  if (seatLabel) {
-    seatLabel.textContent = unclearPerson ? `Tracked at ${unclearPerson.seatLabel}` : "Classroom Seated Position";
+    scoreBadge.textContent = student.confidence ? `${student.confidence}% Match` : "Review Needed";
   }
 
   if (probeImg) {
@@ -669,55 +440,43 @@ window.openVerificationModal = openVerificationModal;
 function closeVerificationModal() {
   const modal = document.getElementById("studentVerificationModal");
   if (modal) modal.classList.add("hidden");
-  state.pendingVerification = null;
+  state.pendingVerificationStudentId = null;
 }
 window.closeVerificationModal = closeVerificationModal;
 
 function confirmVerificationPresent() {
-  if (!state.pendingVerification) return;
-  const { studentId, personId } = state.pendingVerification;
-  
-  const student = state.rosterData.find(s => s.id === studentId);
+  const studentId = state.pendingVerificationStudentId;
+  if (!studentId) return;
+
+  const student = (state.rosterData || []).find(s => s.id === studentId);
   const studentName = student ? student.name : studentId;
 
   if (student) {
     student.status = "Present";
     student.method = "Instructor confirmed";
     student.time = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    student.confidence = 96;
   }
 
-  // Remove the under review person
-  if (personId) {
-    const idx = state.unclearPersons.findIndex(p => p.id === personId);
-    if (idx !== -1) {
-      state.unclearPersons.splice(idx, 1);
-    }
-  } else {
-    if (state.unclearPersons.length > 0) {
-      state.unclearPersons.splice(state.activeReviewPersonIndex, 1);
-    }
+  // Remove from under review list
+  const uIdx = (state.unclearPersons || []).findIndex(p => (p.studentId === studentId || p.id === studentId));
+  if (uIdx !== -1) {
+    state.unclearPersons.splice(uIdx, 1);
   }
-
-  state.identified = state.rosterData.filter(s => s.status === "Present").length;
-  state.unclearCount = state.unclearPersons.length;
-  state.counted = state.identified + state.unclearCount;
-  state.absent = Math.max(0, state.enrolled - state.counted);
 
   closeVerificationModal();
-  showToast(`✓ Marked ${studentName} as Present! Profile appears in grid with photo.`, "success");
-
-  // Re-render workspace immediately so their photo appears in grid with green border
+  showToast(`✓ Marked ${studentName} as Present!`, "success");
+  updateKPIsAndMath();
+  renderReviewPanel();
   renderReviewWorkspace();
   renderRosterTable(state.activeRosterFilter);
 }
 window.confirmVerificationPresent = confirmVerificationPresent;
 
 function confirmVerificationAbsent() {
-  if (!state.pendingVerification) return;
-  const { studentId, personId } = state.pendingVerification;
+  const studentId = state.pendingVerificationStudentId;
+  if (!studentId) return;
 
-  const student = state.rosterData.find(s => s.id === studentId);
+  const student = (state.rosterData || []).find(s => s.id === studentId);
   const studentName = student ? student.name : studentId;
 
   if (student) {
@@ -726,100 +485,31 @@ function confirmVerificationAbsent() {
     student.time = "—";
   }
 
-  // Remove the person from unclear
-  if (personId) {
-    const idx = state.unclearPersons.findIndex(p => p.id === personId);
-    if (idx !== -1) {
-      state.unclearPersons.splice(idx, 1);
-    }
+  // Remove from under review list
+  const uIdx = (state.unclearPersons || []).findIndex(p => (p.studentId === studentId || p.id === studentId));
+  if (uIdx !== -1) {
+    state.unclearPersons.splice(uIdx, 1);
   }
 
-  state.unclearCount = state.unclearPersons.length;
-  state.counted = Math.max(0, state.counted - 1);
-  state.absent = Math.max(0, state.enrolled - state.counted);
-
   closeVerificationModal();
-  showToast(`✕ Marked ${studentName} as Absent. Desk marked blank.`, "info");
-
-  // Re-render workspace immediately so the desk becomes blank
+  showToast(`✕ Marked ${studentName} as Absent.`, "info");
+  updateKPIsAndMath();
+  renderReviewPanel();
   renderReviewWorkspace();
   renderRosterTable(state.activeRosterFilter);
 }
 window.confirmVerificationAbsent = confirmVerificationAbsent;
 
-function setReviewTabMode(mode) {
-  state.reviewTabMode = mode;
-  const btnPerson = document.getElementById("rvBtnByPerson");
-  const btnName = document.getElementById("rvBtnByName");
-  const personTab = document.getElementById("rvPersonTab");
-  const nameTab = document.getElementById("rvNameTab");
-
-  if (mode === "person") {
-    btnPerson?.classList.add("active");
-    btnName?.classList.remove("active");
-    personTab?.classList.remove("hidden");
-    nameTab?.classList.add("hidden");
-  } else {
-    btnName?.classList.add("active");
-    btnPerson?.classList.remove("active");
-    nameTab?.classList.remove("hidden");
-    personTab?.classList.add("hidden");
-    renderReviewByNameTab();
-  }
-}
-window.setReviewTabMode = setReviewTabMode;
-
-function selectReviewPerson(idx) {
-  state.activeReviewPersonIndex = idx;
-  renderReviewDeskGrid();
-  renderReviewSidePanel();
-}
-window.selectReviewPerson = selectReviewPerson;
-
-function rvCarouselSlide(dir) {
-  const track = document.getElementById("rvCropsTrack");
-  if (track) {
-    track.scrollBy({ left: dir * 120, behavior: "smooth" });
-  }
-}
-window.rvCarouselSlide = rvCarouselSlide;
-
-function rvActionNoneOfThese() {
-  if (state.unclearPersons.length === 0) return;
-  const p = state.unclearPersons[state.activeReviewPersonIndex];
-  state.unclearPersons.splice(state.activeReviewPersonIndex, 1);
-  state.counted = Math.max(0, state.counted - 1);
-  state.absent = Math.max(0, state.enrolled - state.counted);
-  showToast(`Person ${p ? p.id : ''} marked as Unregistered / Blank.`, "info");
-  renderReviewWorkspace();
-}
-window.rvActionNoneOfThese = rvActionNoneOfThese;
-
-function rvActionSkipTracking() {
-  if (state.unclearPersons.length <= 1) return;
-  state.activeReviewPersonIndex = (state.activeReviewPersonIndex + 1) % state.unclearPersons.length;
-  renderReviewDeskGrid();
-  renderReviewSidePanel();
-}
-window.rvActionSkipTracking = rvActionSkipTracking;
-
 function switchReviewWorkspace(subview) {
   const btnGrid = document.getElementById("btnRvClassroomGrid");
-  const btnRoster = document.getElementById("btnRvRosterList");
   const ws = document.getElementById("rvMainWorkspace");
-
   if (subview === "grid") {
     btnGrid?.classList.add("active");
-    btnRoster?.classList.remove("active");
     if (ws) ws.classList.remove("hidden");
-  } else {
-    btnRoster?.classList.add("active");
-    btnGrid?.classList.remove("active");
-    switchView("classroomView");
-    switchInstructorWorkspace("roster");
   }
 }
 window.switchReviewWorkspace = switchReviewWorkspace;
+
 
 
 // ================= Modal & Tab Dismissal =================
@@ -871,10 +561,13 @@ async function loadInitialData() {
       state.students = [];
     }
 
-    // 3. Process students into dynamic roster
+    // 3. Load faculty timetable assignments and populate Class/Subject dropdowns
+    await loadFacultyAssignments();
+
+    // 4. Process students into dynamic roster for selected section
     processStudentRoster();
 
-    // 4. Update Header and Session UI
+    // 5. Update Header and Session UI
     updateSessionHeaderUI();
     updateKPIsAndMath();
     initClassroomGrid();
@@ -888,6 +581,106 @@ async function loadInitialData() {
 }
 window.loadInitialData = loadInitialData;
 
+// ================= Dynamic Class & Subject Selector =================
+async function loadFacultyAssignments() {
+  try {
+    const res = await fetch(`${API_BASE}/api/faculty/assignments`);
+    if (!res.ok) return;
+    const data = await res.json();
+    state.facultyClasses = data.classes || [];
+
+    const classSelect = document.getElementById("classroomClassSelect");
+    if (!classSelect || state.facultyClasses.length === 0) return;
+
+    classSelect.innerHTML = "";
+    state.facultyClasses.forEach((c, idx) => {
+      const opt = document.createElement("option");
+      opt.value = c.class_code;
+      opt.textContent = `${c.class_code} (${c.enrolled_count} students)`;
+      if (idx === 0) opt.selected = true;
+      classSelect.appendChild(opt);
+    });
+
+    const initialClass = state.facultyClasses[0];
+    state.selectedClass = initialClass.class_code;
+    populateClassroomSubjectDropdown(initialClass);
+  } catch (err) {
+    console.error("Failed to load faculty assignments:", err);
+  }
+}
+window.loadFacultyAssignments = loadFacultyAssignments;
+
+function populateClassroomSubjectDropdown(classObj) {
+  const subjSelect = document.getElementById("classroomSubjectSelect");
+  if (!subjSelect || !classObj) return;
+
+  subjSelect.innerHTML = "";
+  (classObj.subjects || []).forEach((s, idx) => {
+    const opt = document.createElement("option");
+    opt.value = s.code;
+    opt.textContent = `${s.name} (${s.code})`;
+    if (idx === 0) opt.selected = true;
+    subjSelect.appendChild(opt);
+  });
+
+  if (classObj.subjects && classObj.subjects.length > 0) {
+    onClassroomSubjectChange(classObj.subjects[0].code);
+  }
+}
+
+function onClassroomClassChange(classCode) {
+  state.selectedClass = classCode;
+  const classObj = (state.facultyClasses || []).find(c => c.class_code === classCode);
+  if (!classObj) return;
+  populateClassroomSubjectDropdown(classObj);
+}
+window.onClassroomClassChange = onClassroomClassChange;
+
+async function onClassroomSubjectChange(subjectCode) {
+  const classObj = (state.facultyClasses || []).find(c => c.class_code === state.selectedClass);
+  const subjObj = classObj ? (classObj.subjects || []).find(s => s.code === subjectCode) : null;
+  state.selectedSubject = subjObj;
+
+  const schedBadge = document.getElementById("classroomScheduleBadge");
+  if (schedBadge) {
+    schedBadge.textContent = `Faculty: ${classObj?.faculty_name || 'Jaspreet Singh'} · ${subjObj?.room || 'Room'} · ${subjObj?.time_slot || ''}`;
+  }
+
+  const title = document.getElementById("sessionTitle");
+  const breadcrumb = document.getElementById("sessionBreadcrumb");
+  const roomTime = document.getElementById("sessionRoomTime");
+  if (title) title.textContent = `${subjObj ? subjObj.name : 'Attendance'} · Section ${state.selectedClass}`;
+  if (breadcrumb) breadcrumb.textContent = `Attendance › ${state.selectedClass} / ${subjObj ? subjObj.name : ''}`;
+  if (roomTime) roomTime.textContent = `${subjObj?.room || 'Room'} · Section ${state.selectedClass} · ${subjObj?.time_slot || 'Live'}`;
+
+  if (subjObj) {
+    try {
+      await fetch(`${API_BASE}/api/timetable/select`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          course_code: subjObj.code,
+          course_name: subjObj.name,
+          room_code: subjObj.room,
+          time_slot: subjObj.time_slot,
+          section_code: state.selectedClass,
+          actor: classObj?.faculty_name || "Faculty"
+        })
+      });
+    } catch (e) {
+      console.warn("Failed to update active timetable slot on backend:", e);
+    }
+  }
+
+  processStudentRoster();
+  updateKPIsAndMath();
+  initClassroomGrid();
+  renderReviewPanel();
+  renderReviewWorkspace();
+  renderRosterTable(state.activeRosterFilter);
+}
+window.onClassroomSubjectChange = onClassroomSubjectChange;
+
 function updateSessionHeaderUI() {
   const sess = state.session;
   const breadcrumb = document.getElementById("sessionBreadcrumb");
@@ -896,17 +689,20 @@ function updateSessionHeaderUI() {
   const statusTxt = document.getElementById("trackingStatusText");
   const cFloor = document.getElementById("canvasTimestamp");
 
+  const activeSec = state.selectedClass || sess?.section || "CSE 3";
+  const activeCourse = state.selectedSubject?.name || sess?.course_name || "Data Science";
+
   if (sess && sess.id) {
-    if (breadcrumb) breadcrumb.textContent = `Attendance › Session #${sess.id}`;
-    if (title) title.textContent = sess.course || `${sess.course_code} · ${sess.course_name}`;
-    if (roomTime) roomTime.textContent = `${sess.room || sess.room_code || "Room"} · ${sess.time || "Time"}`;
+    if (breadcrumb) breadcrumb.textContent = `Attendance › ${activeSec} / ${activeCourse}`;
+    if (title) title.textContent = `${activeCourse} · Section ${activeSec}`;
+    if (roomTime) roomTime.textContent = `${state.selectedSubject?.room || sess.room || "Block B, Lab 3"} · ${state.selectedSubject?.time_slot || sess.time || "09:00 - 10:00"}`;
     if (statusTxt) statusTxt.textContent = sess.state === "submitted" ? "Official attendance submitted" : "Spatial tracking active";
-    if (cFloor) cFloor.textContent = `Live Stream Active · ${sess.room || "Classroom"}`;
+    if (cFloor) cFloor.textContent = `Live Stream Active · ${state.selectedSubject?.room || sess.room || "Classroom"}`;
   } else {
-    if (breadcrumb) breadcrumb.textContent = "Attendance › Idle";
-    if (title) title.textContent = "Classroom Face Attendance";
-    if (roomTime) roomTime.textContent = "No active session loaded";
-    if (statusTxt) statusTxt.textContent = "Classroom idle";
+    if (breadcrumb) breadcrumb.textContent = `Attendance › ${activeSec} / ${activeCourse}`;
+    if (title) title.textContent = `${activeCourse} · Section ${activeSec}`;
+    if (roomTime) roomTime.textContent = `${state.selectedSubject?.room || "Block B, Lab 3"} · Section ${activeSec}`;
+    if (statusTxt) statusTxt.textContent = "Classroom ready";
     if (cFloor) cFloor.textContent = "Camera Stream Idle";
   }
 }
@@ -923,16 +719,23 @@ function processStudentRoster() {
     return;
   }
 
-  state.enrolled = state.students.length;
+  // Filter ONLY students belonging to the selected class section!
+  const targetClass = (state.selectedClass || state.session?.section || "CSE 3").trim().toUpperCase();
+  const sectionStudents = (state.students || []).filter(s => {
+    const div = (s.division || s.section || "").trim().toUpperCase();
+    return div === targetClass || div.replace(/\s+/g, "") === targetClass.replace(/\s+/g, "");
+  });
+
+  state.enrolled = sectionStudents.length;
   
-  state.rosterData = state.students.map((s) => {
+  state.rosterData = sectionStudents.map((s) => {
     const initials = s.name.split(" ").map(w => w[0]).join("").toUpperCase();
     return {
       id: s.student_id,
       dbId: s.id,
       name: s.name,
       dept: s.department || "Computer Science",
-      section: s.division || "CS-3A",
+      section: s.division || targetClass,
       status: "Absent",
       time: "—",
       method: "Not detected",
@@ -1170,6 +973,20 @@ async function openIpCameraModal() {
     console.warn("Could not load IP camera config:", e);
   }
 
+  // Bind change listeners to clear stale cache when IP is changed
+  const hostInput = document.getElementById("ipCamHost");
+  if (hostInput && !hostInput.dataset.boundChange) {
+    hostInput.dataset.boundChange = "true";
+    hostInput.addEventListener("input", () => {
+      window._lastTestedWorkingIpCamUrl = null;
+      const p = document.getElementById("ipCamPreset")?.value || "auto";
+      if (p !== "custom" && p !== "rtsp") {
+        const c = document.getElementById("ipCamCustomUrl");
+        if (c) c.value = "";
+      }
+    });
+  }
+
   // Reset feedback
   const feedback = document.getElementById("ipCamTestFeedback");
   if (feedback) feedback.classList.add("hidden");
@@ -1199,11 +1016,20 @@ function onIpCamPresetChange(val) {
 }
 window.onIpCamPresetChange = onIpCamPresetChange;
 
-async function testIpCameraConnection() {
-  const host = document.getElementById("ipCamHost")?.value?.trim();
+function getEffectiveIpCamParams() {
+  const host = document.getElementById("ipCamHost")?.value?.trim() || "";
   const port = parseInt(document.getElementById("ipCamPort")?.value || "8080", 10);
   const preset = document.getElementById("ipCamPreset")?.value || "auto";
-  const customUrl = document.getElementById("ipCamCustomUrl")?.value?.trim() || "";
+  let customUrl = "";
+  if (preset === "custom" || preset === "rtsp") {
+    customUrl = document.getElementById("ipCamCustomUrl")?.value?.trim() || "";
+  }
+  return { host, port, preset, customUrl };
+}
+window.getEffectiveIpCamParams = getEffectiveIpCamParams;
+
+async function testIpCameraConnection() {
+  const { host, port, preset, customUrl } = getEffectiveIpCamParams();
 
   const feedback = document.getElementById("ipCamTestFeedback");
   const msgEl = document.getElementById("ipCamTestMessage");
@@ -1215,13 +1041,23 @@ async function testIpCameraConnection() {
     return;
   }
 
+  let probeHost = host;
+  if (probeHost.includes("://")) {
+    try {
+      const u = new URL(probeHost);
+      probeHost = u.hostname || probeHost;
+    } catch (e) {
+      probeHost = probeHost.split("://")[1].split("/")[0].split(":")[0];
+    }
+  }
+
   if (feedback) {
     feedback.classList.remove("hidden");
     feedback.style.background = "#f1f5f9";
     feedback.style.color = "#334155";
     feedback.style.border = "1px solid #cbd5e1";
     if (iconEl) iconEl.textContent = "⏳";
-    if (msgEl) msgEl.textContent = `Probing ${host}:${port} across streaming formats...`;
+    if (msgEl) msgEl.textContent = `Probing ${probeHost}:${port} across streaming formats...`;
   }
   if (btn) btn.disabled = true;
 
@@ -1300,11 +1136,9 @@ window.testIpCameraConnection = testIpCameraConnection;
 async function handleIpCameraSave(e) {
   if (e) e.preventDefault();
 
-  const host = document.getElementById("ipCamHost")?.value?.trim();
-  const port = parseInt(document.getElementById("ipCamPort")?.value || "8080", 10);
-  const preset = document.getElementById("ipCamPreset")?.value || "auto";
-  let customUrl = document.getElementById("ipCamCustomUrl")?.value?.trim() || "";
-  if (!customUrl && window._lastTestedWorkingIpCamUrl) {
+  const { host, port, preset, customUrl: effectiveCustom } = getEffectiveIpCamParams();
+  let customUrl = effectiveCustom;
+  if (!customUrl && window._lastTestedWorkingIpCamUrl && (preset === "custom" || preset === "rtsp")) {
     customUrl = window._lastTestedWorkingIpCamUrl;
   }
   const btn = document.getElementById("btnSaveIpCam");
@@ -1360,6 +1194,8 @@ async function handleIpCameraSave(e) {
   }
 }
 window.handleIpCameraSave = handleIpCameraSave;
+
+
 
 // ================= Timetable & Class Switching =================
 async function loadTimetable() {
@@ -1576,6 +1412,9 @@ async function pollLiveAttendanceStatus() {
     updateKPIsAndMath();
     renderRosterTable(state.activeRosterFilter);
     renderReviewPanel();
+    if (state.activeView === "reviewView") {
+      renderReviewWorkspace();
+    }
 
     // Re-render right-hand present/absent student cards
     const rosterDisplayBox = document.getElementById("reviewRosterDisplayMode");
@@ -2066,170 +1905,23 @@ function initClassroomGrid() {
 function renderReviewPanel() {
   const panel = document.getElementById("reviewPersonMode");
   const rosterBox = document.getElementById("reviewRosterDisplayMode");
-  const nameBox = document.getElementById("reviewByNameMode");
 
   // Update segmented control badges
-  const countPres = state.rosterData.filter(s => s.status === "Present").length;
-  const countAbs = state.rosterData.filter(s => s.status === "Absent").length;
-  const badgeUnclear = document.getElementById("unclearQueueCountBadge");
+  const countPres = (state.rosterData || []).filter(s => s.status === "Present").length;
+  const countAbs = (state.rosterData || []).filter(s => s.status === "Absent").length;
   const badgePres = document.getElementById("presentCountBadge");
   const badgeAbs = document.getElementById("absentCountBadge");
-  if (badgeUnclear) badgeUnclear.textContent = state.unclearPersons.length;
   if (badgePres) badgePres.textContent = countPres;
   if (badgeAbs) badgeAbs.textContent = countAbs;
 
-  if (state.rosterData.length === 0) {
-    if (panel) {
-      panel.classList.remove("hidden");
-      panel.innerHTML = `
-        <div style="text-align: center; padding: 48px 20px;">
-          <div style="font-size: 32px; margin-bottom: 8px;">📋</div>
-          <h3 style="font-size: 15px; font-weight: 700; color: var(--text-main);">No Active Session or Students</h3>
-          <p style="font-size: 12.5px; color: var(--text-muted); margin: 6px 0 16px 0;">
-            Click [⚡ Load Test Section CS-3A] above to test classroom attendance.
-          </p>
-          <button class="btn-action-primary" onclick="triggerSeedSyntheticData()">⚡ Load Test Section CS-3A</button>
-        </div>
-      `;
-    }
-    if (rosterBox) rosterBox.classList.add("hidden");
-    return;
-  }
+  if (panel) panel.classList.add("hidden");
+  if (rosterBox) rosterBox.classList.remove("hidden");
 
-  // When all unclear people are resolved (or 0 unclear attendees):
-  // Show the verified Present Student List with Name and Roll Number directly in place of the button!
-  if (state.unclearPersons.length === 0) {
-    if (panel) panel.classList.add("hidden");
-    if (nameBox) nameBox.classList.add("hidden");
-    if (rosterBox) rosterBox.classList.remove("hidden");
-    renderRosterDisplayList("present");
-    updateKPIsAndMath();
-    return;
-  }
-
-  // Active unclear people pending review
-  if (panel) panel.classList.remove("hidden");
-  if (rosterBox) rosterBox.classList.add("hidden");
-  if (nameBox) nameBox.classList.add("hidden");
-
-  if (state.activePersonIndex >= state.unclearPersons.length) {
-    state.activePersonIndex = 0;
-  }
-
-  const currentPerson = state.unclearPersons[state.activePersonIndex];
-
-  const titleEl = document.getElementById("reviewPanelTitle");
-  if (titleEl) {
-    titleEl.textContent = `REVIEW QUEUE · PERSON ${currentPerson.id} OF ${state.unclearPersons.length + state.confirmedHistory.length}`;
-  }
-
-  // 1. Pager Buttons
-  const pagerContainer = document.getElementById("personPagerButtons");
-  if (pagerContainer) {
-    pagerContainer.innerHTML = "";
-    state.unclearPersons.forEach((p, idx) => {
-      const btn = document.createElement("button");
-      btn.className = `pager-btn ${idx === state.activePersonIndex ? "active" : ""}`;
-      btn.textContent = p.id;
-      btn.onclick = () => selectPersonByIndex(idx);
-      pagerContainer.appendChild(btn);
-    });
-  }
-
-  // 2. Cropped Photos from Footage (Live Camera Crop & Tracking Frames)
-  const carTitle = document.getElementById("carouselTitle");
-  if (carTitle) {
-    carTitle.textContent = `Footage Crop · Unclear person seated at ${currentPerson.seatLabel}`;
-  }
-  
-  const cropsTrack = document.getElementById("cropsTrack");
-  if (cropsTrack) {
-    cropsTrack.innerHTML = "";
-    
-    // Primary crop card using live footage from camera
-    const liveCropDiv = document.createElement("div");
-    liveCropDiv.className = "crop-card";
-    liveCropDiv.innerHTML = `
-      <div class="crop-img-box best-frame" style="width: 100px; height: 100px; background: #0f172a;">
-        <img src="/api/crops/unclear_live.jpg?t=${Date.now()}" onerror="this.onerror=null; this.src='/api/crops/${currentPerson.studentId}_live.jpg';" class="crop-face-img" alt="Footage crop" style="width: 100%; height: 100%; object-fit: cover;">
-      </div>
-      <div class="crop-time" style="font-weight: 700; color: #b45309;">Live Footage</div>
-      <div class="crop-note best">Camera crop</div>
-    `;
-    cropsTrack.appendChild(liveCropDiv);
-
-    // Other multi-angle tracking frames
-    currentPerson.crops.forEach(crop => {
-      const cropDiv = document.createElement("div");
-      cropDiv.className = "crop-card";
-      cropDiv.innerHTML = `
-        <div class="crop-img-box ${crop.best ? "best-frame" : ""}" style="width: 80px; height: 80px; background: #1e293b;">
-          <img src="/api/crops/unclear_${crop.time.replace(':', '')}.jpg" onerror="this.onerror=null; this.src='/api/crops/${currentPerson.studentId}_live.jpg';" class="crop-face-img" alt="${crop.note}">
-        </div>
-        <div class="crop-time">${crop.time}</div>
-        <div class="crop-note ${crop.best ? "best" : ""}">${crop.note}</div>
-      `;
-      cropsTrack.appendChild(cropDiv);
-    });
-  }
-
-  // 3. Tracking Callout
-  const callout = document.getElementById("trackingCalloutLead");
-  if (callout) callout.textContent = `Spatial Tracking Active · ${currentPerson.seatLabel}`;
-
-  // 4. Candidate List from Absent Students of that Class
-  const candList = document.getElementById("candidateList");
-  if (candList) {
-    candList.innerHTML = "";
-
-    // Candidate pool: Absent or Unclear students in this class
-    const absentCandidates = state.rosterData.filter(s => s.status === "Absent" || s.status === "Under review");
-    let displayCandidates = [];
-
-    if (currentPerson.candidates && currentPerson.candidates.length > 0) {
-      displayCandidates = currentPerson.candidates;
-    } else {
-      displayCandidates = absentCandidates.slice(0, 3).map((a, i) => ({
-        id: a.id,
-        name: a.name,
-        rating: i === 0 ? "Strong match" : (i === 1 ? "Fair match" : "Possible match"),
-        dots: i === 0 ? "●●●" : (i === 1 ? "●●○" : "●○○"),
-        cls: i === 0 ? "strong" : (i === 1 ? "fair" : "weak")
-      }));
-    }
-
-    displayCandidates.forEach(cand => {
-      const initials = cand.name.split(" ").map(n => n[0]).join("");
-      const item = document.createElement("div");
-      item.className = "candidate-item";
-      item.style.cursor = "pointer";
-      item.title = `Click to confirm ${cand.name} as Present`;
-      item.onclick = (e) => {
-        confirmStudent(cand.id, cand.name);
-      };
-      item.innerHTML = `
-        <div class="candidate-avatar">${initials}</div>
-        <div class="candidate-info">
-          <div class="candidate-name" style="font-weight: 700; font-size: 13.5px; color: #1e293b; text-decoration: underline; text-underline-offset: 3px;">${cand.name}</div>
-          <div class="candidate-meta" style="font-size: 11.5px; color: #64748b; margin-top: 2px;">
-            Roll No / ID: <strong style="color: #0f172a;">${cand.id}</strong> · Click name to confirm
-          </div>
-        </div>
-        <div class="candidate-score-dots ${cand.cls || 'strong'}" style="margin-right: 8px;">
-          <span>${cand.dots || '●●●'}</span>
-          <span style="font-size: 11px;">${cand.rating || 'Candidate'}</span>
-        </div>
-        <button class="btn-confirm" onclick="event.stopPropagation(); confirmStudent('${cand.id}', '${cand.name}')" style="background: #15803d; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-weight: 600; cursor: pointer; font-size: 12px; display: inline-flex; align-items: center; gap: 4px;">
-          ✓ Confirm Present
-        </button>
-      `;
-      candList.appendChild(item);
-    });
-  }
-
-  initClassroomGrid();
+  renderRosterDisplayList(state.reviewMode || "present");
   updateKPIsAndMath();
 }
+
+
 
 // Quick helper to manually mark student present from absent roster
 function markStudentPresentManually(studentId) {
@@ -2646,6 +2338,9 @@ async function submitAttendanceSession() {
       body: JSON.stringify({
         session_id: state.session.id || 14,
         submitted_by: actorName,
+        subject_code: state.session?.course_code || "AGCS2102",
+        subject_name: state.session?.course_name || "Data Science",
+        section_code: state.session?.section_code || "CS-3A",
         records: state.rosterData.map(r => ({
           student_id: r.id,
           status: r.status,
@@ -2660,7 +2355,33 @@ async function submitAttendanceSession() {
       const absCount = state.rosterData.filter(s => s.status === "Absent").length;
       showToast(`✓ Attendance saved to database: ${presCount} Present, ${absCount} Absent.`, "success");
       state.session.state = "submitted";
+
+      // Once attendance is submitted, clear active names and session recognition state
+      state.matchedMap = {};
+      state.unclearPersons = [];
+      state.rosterData.forEach(s => {
+        s.status = "Absent";
+        s.time = "—";
+        s.method = "Attendance recorded";
+      });
+      state.identified = 0;
+      state.unclearCount = 0;
+      state.counted = 0;
+      state.absent = state.enrolled;
+
       updateSessionHeaderUI();
+      updateKPIsAndMath();
+      initClassroomGrid();
+      renderReviewPanel();
+      renderReviewWorkspace();
+      renderRosterTable(state.activeRosterFilter);
+
+      const rvSubmitBtn = document.getElementById("rvBtnSubmit");
+      if (rvSubmitBtn) {
+        rvSubmitBtn.disabled = true;
+        rvSubmitBtn.textContent = "Submitted ✓";
+      }
+
       if (btnTopCorner) {
         btnTopCorner.disabled = false;
         btnTopCorner.innerHTML = "✓ Attendance Saved";
@@ -2675,6 +2396,23 @@ async function submitAttendanceSession() {
     }
   } catch (e) {
     showToast("✓ Attendance submitted and saved to database.", "success");
+    state.matchedMap = {};
+    state.unclearPersons = [];
+    state.rosterData.forEach(s => {
+      s.status = "Absent";
+      s.time = "—";
+      s.method = "Attendance recorded";
+    });
+    state.identified = 0;
+    state.unclearCount = 0;
+    state.counted = 0;
+    state.absent = state.enrolled;
+    updateSessionHeaderUI();
+    updateKPIsAndMath();
+    initClassroomGrid();
+    renderReviewPanel();
+    renderReviewWorkspace();
+    renderRosterTable(state.activeRosterFilter);
   } finally {
     if (submitBtn && submitBtn.textContent === "Saving to Database...") {
       submitBtn.disabled = false;
@@ -3554,7 +3292,7 @@ async function checkAuth() {
       }
     }
   } catch (e) {
-    console.error("Auth check failed:", e);
+    console.warn("Auth check network notice:", e);
   }
 
   // Not authenticated: Show login overlay
@@ -3709,10 +3447,10 @@ function selectLoginRole(role) {
     }
     if (roleInput) roleInput.value = "faculty";
     if (userIdInput) {
-      userIdInput.placeholder = "e.g. FAC104 (or Dr. Meera)";
+      userIdInput.placeholder = "Faculty User ID (e.g. FAC0011)";
     }
     if (pwdInput) {
-      pwdInput.placeholder = "Enter faculty password (default: faculty)";
+      pwdInput.placeholder = "Faculty Password";
     }
   } else {
     if (tabFaculty) {
@@ -3729,17 +3467,20 @@ function selectLoginRole(role) {
     }
     if (roleInput) roleInput.value = "hod";
     if (userIdInput) {
-      userIdInput.placeholder = "e.g. HOD01";
+      userIdInput.placeholder = "HOD User ID (e.g. HOD01 or admin)";
     }
     if (pwdInput) {
-      pwdInput.placeholder = "Enter HOD admin password (default: admin)";
+      pwdInput.placeholder = "HOD Password (default: admin)";
     }
   }
 }
 window.selectLoginRole = selectLoginRole;
 
 async function handleRegisterSubmit(event) {
-  event.preventDefault();
+  if (event) {
+    if (typeof event.preventDefault === "function") event.preventDefault();
+    if (typeof event.stopPropagation === "function") event.stopPropagation();
+  }
   const uid = document.getElementById("regUserId").value.trim();
   const name = document.getElementById("regName").value.trim();
   const role = document.getElementById("regRole").value;
@@ -3775,16 +3516,40 @@ async function handleRegisterSubmit(event) {
       alertBox.classList.remove("hidden");
     }
   }
+  return false;
 }
 window.handleRegisterSubmit = handleRegisterSubmit;
 
 async function handleLoginSubmit(event) {
-  event.preventDefault();
-  const userId = document.getElementById("loginUserId").value.trim();
-  const role = document.getElementById("loginRole").value;
-  const password = document.getElementById("loginPassword").value;
+  if (event) {
+    if (typeof event.preventDefault === "function") event.preventDefault();
+    if (typeof event.stopPropagation === "function") event.stopPropagation();
+  }
+
+  const userIdInput = document.getElementById("loginUserId");
+  const passwordInput = document.getElementById("loginPassword");
+  const roleInput = document.getElementById("loginRole");
   const alertBox = document.getElementById("loginAlertBox");
   const alertMsg = document.getElementById("loginAlertMsg");
+  const submitBtn = document.getElementById("btnLoginSubmit");
+
+  const userId = userIdInput ? userIdInput.value.trim() : "";
+  const role = roleInput ? roleInput.value : "faculty";
+  const password = passwordInput ? passwordInput.value : "";
+
+  if (!userId || !password) {
+    if (alertBox) {
+      if (alertMsg) alertMsg.textContent = "Please enter both User ID and Password.";
+      else alertBox.textContent = "Please enter both User ID and Password.";
+      alertBox.classList.remove("hidden");
+    }
+    return false;
+  }
+
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.textContent = "Signing In...";
+  }
 
   try {
     const res = await fetch(`${API_BASE}/api/auth/login`, {
@@ -3797,14 +3562,23 @@ async function handleLoginSubmit(event) {
     if (data.success) {
       state.currentUser = data.user;
       if (alertBox) alertBox.classList.add("hidden");
-      document.getElementById("loginScreen").classList.add("hidden");
+      const loginOverlay = document.getElementById("loginScreen");
+      if (loginOverlay) loginOverlay.classList.add("hidden");
       updateRoleUI(data.user);
-      showToast(`Welcome, ${data.user.name}! Authenticated as ${data.user.role.toUpperCase()}`, "success");
-      await loadInitialData();
-      await loadTimetable();
+      showToast(`Welcome, ${data.user.name}! Signed in as ${data.user.role.toUpperCase()}`, "success");
+      try {
+        await loadInitialData();
+      } catch (e) {
+        console.warn("loadInitialData error:", e);
+      }
+      try {
+        await loadTimetable();
+      } catch (e) {
+        console.warn("loadTimetable error:", e);
+      }
     } else {
       if (alertBox) {
-        const msg = data.message || "Invalid credentials. Please verify your role and password.";
+        const msg = data.message || "Invalid credentials. Please verify your role, ID, and password.";
         if (alertMsg) alertMsg.textContent = msg;
         else alertBox.textContent = msg;
         alertBox.classList.remove("hidden");
@@ -3817,7 +3591,13 @@ async function handleLoginSubmit(event) {
       else alertBox.textContent = msg;
       alertBox.classList.remove("hidden");
     }
+  } finally {
+    if (submitBtn) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = "Sign In";
+    }
   }
+  return false;
 }
 window.handleLoginSubmit = handleLoginSubmit;
 
@@ -3861,6 +3641,10 @@ async function handleHodAddFaculty(event) {
   const dept = document.getElementById("newFacultyDept").value.trim();
   const role = document.getElementById("newFacultyRole").value.trim();
   const password = document.getElementById("newFacultyPassword").value.trim();
+  const secQ1 = document.getElementById("newFacultySecQ1")?.value.trim() || "";
+  const secA1 = document.getElementById("newFacultySecA1")?.value.trim() || "";
+  const secQ2 = document.getElementById("newFacultySecQ2")?.value.trim() || "";
+  const secA2 = document.getElementById("newFacultySecA2")?.value.trim() || "";
 
   if (!empId || !name) {
     showToast("Faculty Employee ID and Full Name are required", "error");
@@ -3878,6 +3662,10 @@ async function handleHodAddFaculty(event) {
         department: dept,
         role: role,
         password: password,
+        sec_q1: secQ1,
+        sec_a1: secA1,
+        sec_q2: secQ2,
+        sec_a2: secA2,
         actor: state.currentUser ? state.currentUser.name : "HOD"
       })
     });
@@ -3897,6 +3685,97 @@ async function handleHodAddFaculty(event) {
 }
 window.handleHodAddFaculty = handleHodAddFaculty;
 
+// Faculty Security Questions & Recovery Management (HOD)
+function openEditFacultySecurityModal(empId) {
+  const modal = document.getElementById("editFacultySecurityModal");
+  if (!modal) return;
+  const faculty = (state.hodFacultyList || []).find(f => (f.employee_id === empId || f.user_id === empId));
+  if (!faculty) {
+    showToast(`Faculty record for ${empId} not found.`, "error");
+    return;
+  }
+
+  document.getElementById("editSecEmpId").value = faculty.employee_id;
+  document.getElementById("editSecFacultyName").value = `${faculty.name} (${faculty.employee_id})`;
+  document.getElementById("editSecQ1").value = faculty.sec_q1 || "What is your primary academic department?";
+  document.getElementById("editSecA1").value = faculty.sec_a1 || "";
+  document.getElementById("editSecQ2").value = faculty.sec_q2 || "What is your university security code?";
+  document.getElementById("editSecA2").value = faculty.sec_a2 || "";
+
+  const sub = document.getElementById("editFacultySecuritySubtitle");
+  if (sub) sub.textContent = `Update password recovery credentials for ${faculty.name}`;
+
+  modal.classList.remove("hidden");
+}
+window.openEditFacultySecurityModal = openEditFacultySecurityModal;
+
+function closeEditFacultySecurityModal() {
+  const modal = document.getElementById("editFacultySecurityModal");
+  if (modal) modal.classList.add("hidden");
+}
+window.closeEditFacultySecurityModal = closeEditFacultySecurityModal;
+
+async function handleSaveFacultySecurity(event) {
+  event.preventDefault();
+  const empId = document.getElementById("editSecEmpId").value.trim();
+  const secQ1 = document.getElementById("editSecQ1").value.trim();
+  const secA1 = document.getElementById("editSecA1").value.trim();
+  const secQ2 = document.getElementById("editSecQ2").value.trim();
+  const secA2 = document.getElementById("editSecA2").value.trim();
+
+  if (!empId || !secQ1 || !secA1 || !secQ2 || !secA2) {
+    showToast("All security questions and answers are required.", "error");
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/api/hod/faculty/security-questions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        employee_id: empId,
+        sec_q1: secQ1,
+        sec_a1: secA1,
+        sec_q2: secQ2,
+        sec_a2: secA2,
+        actor: state.currentUser ? state.currentUser.name : "HOD"
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Security questions updated for faculty ${empId}!`, "success");
+      closeEditFacultySecurityModal();
+      await loadHodFaculty();
+    } else {
+      showToast(data.message || "Failed to update security questions.", "error");
+    }
+  } catch (err) {
+    showToast("Error updating security questions.", "error");
+  }
+}
+window.handleSaveFacultySecurity = handleSaveFacultySecurity;
+
+let fpDebounceTimer = null;
+async function handleFpUserChange(userId) {
+  clearTimeout(fpDebounceTimer);
+  const cleanId = (userId || "").trim();
+  if (!cleanId) return;
+  fpDebounceTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/auth/security-questions?user_id=${encodeURIComponent(cleanId)}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success) {
+          const q1El = document.getElementById("fpQuestion1Label");
+          const q2El = document.getElementById("fpQuestion2Label");
+          if (q1El && data.sec_q1) q1El.textContent = data.sec_q1;
+          if (q2El && data.sec_q2) q2El.textContent = data.sec_q2;
+        }
+      }
+    } catch (e) {}
+  }, 300);
+}
+window.handleFpUserChange = handleFpUserChange;
 
 function openForgotPasswordModal() {
   const modal = document.getElementById("forgotPasswordModal");
@@ -4189,8 +4068,10 @@ async function loadHodStudents(query = "", classFilter = "all") {
       let totalPerc = 0;
       let borderline = 0;
       currentHodStudents.forEach(s => {
-        totalPerc += (s.overall_attendance_pct || 85);
-        if (s.overall_attendance_pct >= 65 && s.overall_attendance_pct < 75) borderline++;
+        const pct = (s.overall_attendance_pct !== undefined && s.overall_attendance_pct !== null) ? Number(s.overall_attendance_pct) : 0;
+        const totCls = Number(s.total_classes || 0);
+        totalPerc += pct;
+        if (totCls > 0 && pct >= 65 && pct < 75) borderline++;
       });
       const avg = totalStudents > 0 ? (totalPerc / totalStudents).toFixed(1) : "0.0";
 
@@ -4208,17 +4089,21 @@ async function loadHodStudents(query = "", classFilter = "all") {
 
       currentHodStudents.forEach(s => {
         const tr = document.createElement("tr");
-        const pct = s.overall_attendance_pct || 85;
-        let statusTag = '<span class="status-pill pill-present">Eligible</span>';
-        if (pct < 65) statusTag = '<span class="status-pill pill-absent">Shortage</span>';
-        else if (pct < 75) statusTag = '<span class="status-pill pill-review">Borderline</span>';
+        const pct = (s.overall_attendance_pct !== undefined && s.overall_attendance_pct !== null) ? Number(s.overall_attendance_pct) : 0;
+        const totCls = Number(s.total_classes || 0);
+        let statusTag = '<span class="status-pill pill-neutral">No records</span>';
+        if (totCls > 0) {
+          if (pct >= 75) statusTag = '<span class="status-pill pill-present">Eligible</span>';
+          else if (pct >= 65) statusTag = '<span class="status-pill pill-review">Borderline</span>';
+          else statusTag = '<span class="status-pill pill-absent">Shortage</span>';
+        }
 
         tr.innerHTML = `
           <td><strong>${s.student_id}</strong></td>
           <td>${s.name}</td>
           <td><span class="user-role-badge">${s.class_code || s.division || 'CS-3A'}</span></td>
           <td>${s.department || 'Computer Science'}</td>
-          <td><strong>${pct}%</strong></td>
+          <td><strong>${totCls > 0 ? `${pct}%` : '0.0%'}</strong></td>
           <td>${statusTag}</td>
           <td>
             <div style="display: flex; gap: 6px; align-items: center;">
@@ -4293,11 +4178,31 @@ async function openHodStudentAttendance(studentId) {
       document.getElementById("hodStudentInfoName").textContent = st.name || studentId;
       document.getElementById("hodStudentInfoMeta").textContent = `ID: ${st.student_id} • Section: ${st.class_code || 'CS-3A'} • Department: ${st.department || 'Computer Science'}`;
       
+      const totAtt = Number(data.total_attended !== undefined ? data.total_attended : (st.total_attended || 0));
+      const totCls = Number(data.total_classes !== undefined ? data.total_classes : (st.total_classes || 0));
+      const overall = totCls > 0 ? (totAtt * 100.0 / totCls).toFixed(1) : (st.overall_attendance_pct !== undefined ? Number(st.overall_attendance_pct).toFixed(1) : "0.0");
+      const numOverall = parseFloat(overall);
+
       const overallPill = document.getElementById("hodStudentInfoOverallPill");
+      const eligText = document.getElementById("hodStudentInfoEligibilityText");
       if (overallPill) {
-        const overall = st.overall_attendance_pct || 85;
-        overallPill.textContent = `Overall: ${overall}%`;
-        overallPill.className = overall >= 75 ? "status-pill pill-present" : "status-pill pill-absent";
+        if (totCls === 0) {
+          overallPill.textContent = "0.0% (No Records)";
+          overallPill.className = "status-pill pill-neutral";
+          if (eligText) eligText.textContent = "No attendance recorded yet";
+        } else if (numOverall >= 75) {
+          overallPill.textContent = `Overall: ${overall}%`;
+          overallPill.className = "status-pill pill-present";
+          if (eligText) eligText.textContent = "Exam Eligible (≥ 75%)";
+        } else if (numOverall >= 65) {
+          overallPill.textContent = `Overall: ${overall}%`;
+          overallPill.className = "status-pill pill-review";
+          if (eligText) eligText.textContent = "Borderline (65% – 74%)";
+        } else {
+          overallPill.textContent = `Overall: ${overall}%`;
+          overallPill.className = "status-pill pill-absent";
+          if (eligText) eligText.textContent = "Attendance Shortage (< 75%)";
+        }
       }
 
       // Populate list
@@ -4432,8 +4337,8 @@ async function loadHodSubjects() {
         tr.innerHTML = `
           <td><strong>${s.code}</strong></td>
           <td>${s.name}</td>
+          <td><span class="user-role-badge">${s.department || 'Computer Science'}</span></td>
           <td>${s.credits || 4}</td>
-          <td><span class="user-role-badge">${s.assigned_faculty_name || 'Dr. Iyer'}</span></td>
           <td class="text-dim">${s.room || 'Block B, Lab 3'}</td>
           <td>
             <button class="btn-action-danger" style="font-size: 11.5px; padding: 4px 8px;" onclick="handleHodDeleteSubject('${s.code}', '${s.name.replace(/'/g, "\\'")}')" title="Delete Subject">
@@ -4494,7 +4399,6 @@ async function handleHodAddSubject(event) {
   const dept = document.getElementById("subDept").value.trim();
   const credits = parseInt(document.getElementById("subCredits").value, 10);
   const room = document.getElementById("subRoom").value.trim();
-  const facultyId = document.getElementById("subFacultySelect").value;
 
   try {
     const res = await fetch(`${API_BASE}/api/hod/subjects/add`, {
@@ -4505,17 +4409,15 @@ async function handleHodAddSubject(event) {
         name,
         department: dept,
         credits,
-        room,
-        assigned_faculty_id: facultyId
+        room
       })
     });
 
     const data = await res.json();
     if (data.success) {
-      showToast(`Subject ${name} (${code}) added and assigned to faculty!`, "success");
+      showToast(`Subject ${name} (${code}) added successfully!`, "success");
       document.getElementById("hodAddSubjectForm").reset();
       await loadHodSubjects();
-      await loadHodFaculty();
     } else {
       showToast(data.message || "Failed to add subject", "error");
     }
@@ -4530,7 +4432,6 @@ window.handleHodAddSubject = handleHodAddSubject;
 // ==========================================================================
 async function loadHodFaculty() {
   const container = document.getElementById("hodFacultyCardsGrid");
-  const subFacSelect = document.getElementById("subFacultySelect");
   const slotFacSelect = document.getElementById("slotFacultyId");
   if (!container) return;
   container.innerHTML = "";
@@ -4539,18 +4440,12 @@ async function loadHodFaculty() {
     const res = await fetch(`${API_BASE}/api/hod/faculty`);
     if (res.ok) {
       const facultyList = await res.json();
+      state.hodFacultyList = facultyList;
       
-      if (subFacSelect) subFacSelect.innerHTML = "";
       if (slotFacSelect) slotFacSelect.innerHTML = "";
 
       facultyList.forEach(f => {
-        // Populating dropdowns
-        if (subFacSelect) {
-          const opt = document.createElement("option");
-          opt.value = f.user_id;
-          opt.textContent = `${f.name} (${f.user_id})`;
-          subFacSelect.appendChild(opt);
-        }
+        // Populating timetable dropdown
         if (slotFacSelect) {
           const opt = document.createElement("option");
           opt.value = f.user_id;
@@ -4592,7 +4487,7 @@ async function loadHodFaculty() {
             <div>${scheduleHtml}</div>
           </div>
 
-          <div style="padding: 10px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+          <div style="padding: 10px 12px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
             <div>
               <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; margin-bottom: 2px;">Faculty Login Credentials</div>
               <div style="font-size: 12.5px; color: #1e293b; font-family: monospace;">
@@ -4607,6 +4502,25 @@ async function loadHodFaculty() {
               <button type="button" class="btn-action-danger" onclick="handleHodDeleteFaculty('${f.employee_id}', '${f.name.replace(/'/g, "\\'")}')" style="padding: 4px 8px; font-size: 11.5px; cursor: pointer; white-space: nowrap;" title="Deregister Faculty">
                 Remove
               </button>
+            </div>
+          </div>
+
+          <div style="padding: 10px 12px; background: #ffffff; border-radius: 6px; border: 1px solid #e2e8f0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+              <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: #475569; display: flex; align-items: center; gap: 5px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+                Security Recovery Q&A
+              </div>
+              <button type="button" class="btn-action-primary" onclick="openEditFacultySecurityModal('${f.employee_id}')" style="padding: 3px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 4px;">
+                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                Edit
+              </button>
+            </div>
+            <div style="font-size: 11.5px; color: #334155;">
+              <div style="margin-bottom: 2px;"><span style="color: #64748b;">Q1:</span> ${f.sec_q1 || 'What is your primary academic department?'}</div>
+              <div style="margin-bottom: 5px; color: #166534; font-size: 11px; font-family: monospace;">↳ Ans: <strong>${f.sec_a1 || '••••'}</strong></div>
+              <div style="margin-bottom: 2px;"><span style="color: #64748b;">Q2:</span> ${f.sec_q2 || 'What is your university security code?'}</div>
+              <div style="color: #166534; font-size: 11px; font-family: monospace;">↳ Ans: <strong>${f.sec_a2 || '••••'}</strong></div>
             </div>
           </div>
         `;
@@ -4898,4 +4812,215 @@ async function handleHodAddTimetable(event) {
   }
 }
 window.handleHodAddTimetable = handleHodAddTimetable;
+
+// ==========================================================================
+// DEDICATED SUBJECT ATTENDANCE RECORD & OFFICIAL PDF EXPORT ENGINE
+// ==========================================================================
+let currentRecordSubject = "AGCS2102";
+let currentRecordClass = "CS-3A";
+let currentRecordData = null;
+let currentRecordSubjectsList = [];
+
+async function loadRecordPanel() {
+  try {
+    const subSelect = document.getElementById("recordSubjectSelect");
+    const facId = state.currentUser ? (state.currentUser.user_id || state.currentUser.id || state.currentUser.employee_id || "") : "";
+    
+    // Fetch subjects taught by this faculty member
+    const mySubsRes = await fetch(`${API_BASE}/api/faculty/my-subjects?faculty_id=${encodeURIComponent(facId)}`);
+    if (mySubsRes.ok) {
+      const mySubsData = await mySubsRes.json();
+      currentRecordSubjectsList = mySubsData.subjects || [];
+      if (subSelect) {
+        const prevVal = subSelect.value || currentRecordSubject;
+        subSelect.innerHTML = "";
+        currentRecordSubjectsList.forEach((sub, i) => {
+          const opt = document.createElement("option");
+          opt.value = sub.code;
+          opt.textContent = `${sub.code} — ${sub.name}`;
+          subSelect.appendChild(opt);
+        });
+        if (currentRecordSubjectsList.some(s => s.code === prevVal)) {
+          subSelect.value = prevVal;
+          currentRecordSubject = prevVal;
+        } else if (currentRecordSubjectsList.length > 0) {
+          subSelect.value = currentRecordSubjectsList[0].code;
+          currentRecordSubject = currentRecordSubjectsList[0].code;
+        }
+      }
+    }
+
+    if (subSelect && subSelect.value) {
+      currentRecordSubject = subSelect.value;
+    }
+
+    const clsSelect = document.getElementById("recordClassSelect");
+    if (clsSelect) {
+      currentRecordClass = clsSelect.value || "all";
+    }
+
+    // 2. Fetch subject attendance records from backend
+    const recordUrl = `${API_BASE}/api/attendance/subject-record?subject_code=${encodeURIComponent(currentRecordSubject)}&class_code=${encodeURIComponent(currentRecordClass)}`;
+    const res = await fetch(recordUrl);
+    if (!res.ok) throw new Error("Failed to load subject records");
+    
+    currentRecordData = await res.json();
+    renderRecordPanelData();
+
+  } catch (err) {
+    console.error("Error loading subject attendance records:", err);
+    showToast("Error loading subject attendance records", "error");
+  }
+}
+window.loadRecordPanel = loadRecordPanel;
+
+function handleRecordSubjectChange(val) {
+  currentRecordSubject = val;
+  loadRecordPanel();
+}
+window.handleRecordSubjectChange = handleRecordSubjectChange;
+
+function handleRecordClassChange(val) {
+  currentRecordClass = val;
+  loadRecordPanel();
+}
+window.handleRecordClassChange = handleRecordClassChange;
+
+function handleRecordSearch(query) {
+  renderRecordPanelData(query);
+}
+window.handleRecordSearch = handleRecordSearch;
+
+function renderRecordPanelData(searchQuery = "") {
+  if (!currentRecordData) return;
+
+  const subject = currentRecordData.subject || {};
+  const summary = currentRecordData.summary || {};
+  const allStudents = currentRecordData.students || [];
+  const sessions = currentRecordData.sessions || [];
+
+  // 1. Update banner
+  const bannerTitle = document.getElementById("recordSubjectBannerTitle");
+  const bannerFaculty = document.getElementById("recordSubjectBannerFaculty");
+  const bannerMeta = document.getElementById("recordSubjectBannerMeta");
+  
+  if (bannerTitle) bannerTitle.textContent = `${subject.code || currentRecordSubject} — ${subject.name || 'Course'}`;
+  if (bannerFaculty) bannerFaculty.textContent = `Faculty / Instructor: ${subject.assigned_faculty_name || 'Department Faculty'} • Room: ${subject.room || 'Block B'}`;
+  if (bannerMeta) bannerMeta.textContent = `${subject.department || 'Computer Science'} • ${subject.credits || 3} Credits`;
+
+  // 2. Filter students by search
+  const cleanQ = (searchQuery || "").trim().toLowerCase();
+  const students = cleanQ
+    ? allStudents.filter(s => (s.name || "").toLowerCase().includes(cleanQ) || (s.student_id || "").toLowerCase().includes(cleanQ))
+    : allStudents;
+
+  // 3. Update KPI cards
+  const statTot = document.getElementById("recordStatTotalStudents");
+  const statCls = document.getElementById("recordStatTotalClasses");
+  const statAvg = document.getElementById("recordStatAvgAttendance");
+  const statElig = document.getElementById("recordStatEligibleCount");
+  const statShort = document.getElementById("recordStatShortageCount");
+  const countNotice = document.getElementById("recordTableCountNotice");
+
+  if (statTot) statTot.textContent = summary.total_students !== undefined ? summary.total_students : allStudents.length;
+  if (statCls) statCls.textContent = summary.total_classes !== undefined ? summary.total_classes : 0;
+  if (statAvg) statAvg.textContent = `${summary.average_attendance !== undefined ? summary.average_attendance : 0.0}%`;
+  if (statElig) statElig.textContent = summary.eligible_count !== undefined ? summary.eligible_count : 0;
+  if (statShort) statShort.textContent = summary.shortage_count !== undefined ? summary.shortage_count : 0;
+  if (countNotice) countNotice.textContent = `${students.length} student${students.length === 1 ? '' : 's'} displayed`;
+
+  // 4. Populate Student Table
+  const tbody = document.getElementById("recordStudentsTableBody");
+  if (tbody) {
+    tbody.innerHTML = "";
+    if (students.length === 0) {
+      tbody.innerHTML = `<tr><td colspan="8" style="text-align: center; padding: 28px; color: var(--text-muted);">No student records found for ${subject.code || currentRecordSubject} in selected section.</td></tr>`;
+    } else {
+      students.forEach((st, idx) => {
+        const tr = document.createElement("tr");
+        const pct = st.percentage !== undefined ? st.percentage : 0.0;
+        const barColor = pct >= 75 ? "#22c55e" : pct >= 65 ? "#f59e0b" : pct > 0 ? "#ef4444" : "#94a3b8";
+
+        let eligTag = '<span class="status-pill pill-neutral">No Records</span>';
+        if (st.total > 0) {
+          if (st.eligibility === "Eligible" || pct >= 75) {
+            eligTag = '<span class="status-pill pill-present">Eligible (≥75%)</span>';
+          } else if (pct >= 65) {
+            eligTag = '<span class="status-pill pill-review">Borderline</span>';
+          } else {
+            eligTag = '<span class="status-pill pill-absent">Shortage (&lt;75%)</span>';
+          }
+        }
+
+        tr.innerHTML = `
+          <td>${idx + 1}</td>
+          <td><strong>${st.student_id}</strong></td>
+          <td><strong>${st.name}</strong></td>
+          <td><span class="user-role-badge">${st.division || 'CS-3A'}</span></td>
+          <td style="text-align: center; font-weight: 700; color: #1e293b;">
+            ${st.attended} / ${st.total}
+          </td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div class="sub-att-bar-wrap" style="flex: 1; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden;">
+                <div class="sub-att-bar-fill" style="width: ${Math.min(100, pct)}%; height: 100%; background: ${barColor};"></div>
+              </div>
+              <span style="font-weight: 700; font-size: 13px; color: ${barColor}; min-width: 42px; text-align: right;">${pct}%</span>
+            </div>
+          </td>
+          <td style="text-align: center;">${eligTag}</td>
+          <td style="text-align: right;">
+            <button class="btn-action-primary" style="font-size: 11.5px; padding: 4px 10px;" onclick="openHodStudentAttendance('${st.student_id}')">
+              Inspect & Override
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+  }
+
+  // 5. Populate Sessions History Table
+  const sessBody = document.getElementById("recordSessionsTableBody");
+  const sessNotice = document.getElementById("recordSessionsCountNotice");
+  if (sessBody) {
+    sessBody.innerHTML = "";
+    if (sessions.length === 0) {
+      sessBody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 24px; color: var(--text-muted);">No submitted attendance sessions on record for this subject yet. Take attendance in Classroom & Live Camera to record sessions.</td></tr>`;
+    } else {
+      sessions.forEach(sess => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td><strong>#${sess.session_id}</strong></td>
+          <td>${sess.date} <span class="meta-txt">${sess.time}</span></td>
+          <td><span class="user-role-badge">${sess.section}</span></td>
+          <td><strong style="color: #16a34a;">${sess.present_count} Present</strong></td>
+          <td><strong style="color: #dc2626;">${sess.absent_count} Absent</strong></td>
+          <td>${sess.instructor}</td>
+          <td><span class="status-pill pill-present">Concluded & Saved</span></td>
+        `;
+        sessBody.appendChild(tr);
+      });
+    }
+  }
+  if (sessNotice) {
+    sessNotice.textContent = `${sessions.length} submitted session${sessions.length === 1 ? '' : 's'} on record`;
+  }
+}
+
+function exportSubjectRecordPdf() {
+  const subCode = currentRecordSubject || "AGCS2102";
+  const classCode = currentRecordClass || "all";
+  showToast(`Generating official PDF for ${subCode} (${classCode})...`, "info");
+  
+  const exportUrl = `${API_BASE}/api/attendance/export-pdf?subject_code=${encodeURIComponent(subCode)}&class_code=${encodeURIComponent(classCode)}`;
+  
+  const link = document.createElement("a");
+  link.href = exportUrl;
+  link.download = `Attendance_Report_${subCode}_${classCode}.pdf`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}
+window.exportSubjectRecordPdf = exportSubjectRecordPdf;
 

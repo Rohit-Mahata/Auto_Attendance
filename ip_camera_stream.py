@@ -219,12 +219,51 @@ def test_ip_camera_stream(ip, port=8080, path="/video", custom_url="", timeout=3
     DroidCam, RTSP, MJPEG), and returns detected format & resolution.
     """
     local_wifi_ip = get_local_wifi_ip()
-    target_url = custom_url.strip() if custom_url and custom_url.strip() else build_ip_camera_url(ip, port, path)
+
+    raw_ip = str(ip or "").strip()
+    clean_path_input = str(path or "").strip().lower()
+
+    # Extract host, scheme, and port from raw_ip (supports https://10.168.109.1 or 10.168.109.1:4444)
+    ip_host = raw_ip
+    ip_scheme = "https" if "https://" in raw_ip.lower() else "http"
+    if "://" in raw_ip:
+        parsed_ip = urllib.parse.urlparse(raw_ip)
+        ip_host = parsed_ip.hostname or raw_ip
+        if parsed_ip.scheme:
+            ip_scheme = parsed_ip.scheme
+        if parsed_ip.port:
+            try:
+                port = int(parsed_ip.port)
+            except Exception:
+                pass
+    elif ":" in raw_ip and not raw_ip.endswith("]"):
+        parts = raw_ip.split(":")
+        ip_host = parts[0]
+        try:
+            port = int(parts[1])
+        except Exception:
+            pass
+
+    # Only prioritize custom_url if explicitly custom/rtsp mode, OR if no ip was given,
+    # OR if custom_url's host actually matches the ip_host provided.
+    use_custom = False
+    if custom_url and custom_url.strip():
+        if clean_path_input in ("custom", "rtsp"):
+            use_custom = True
+        elif not raw_ip:
+            use_custom = True
+        else:
+            parsed_custom = urllib.parse.urlparse(custom_url.strip())
+            custom_host = parsed_custom.hostname or ""
+            if custom_host and custom_host == ip_host:
+                use_custom = True
+
+    target_url = custom_url.strip() if use_custom else build_ip_camera_url(ip, port, path)
 
     # 1. Parse target host, port, and scheme
     parsed = urllib.parse.urlparse(target_url)
-    scheme = parsed.scheme or ("https" if "https://" in str(ip).lower() else "http")
-    host = parsed.hostname or str(ip).strip().replace("https://", "").replace("http://", "").split("/")[0].split(":")[0]
+    scheme = parsed.scheme or ip_scheme
+    host = parsed.hostname or ip_host or "127.0.0.1"
     port_to_check = parsed.port or int(port or 8080)
 
     # 2. Fast TCP pre-flight socket test
@@ -249,10 +288,14 @@ def test_ip_camera_stream(ip, port=8080, path="/video", custom_url="", timeout=3
     if not clean_path.startswith("/"):
         clean_path = "/" + clean_path
 
-    if custom_url and custom_url.strip():
+    if use_custom and custom_url and custom_url.strip():
         candidates.append((custom_url.strip(), "Custom URL", False))
     else:
-        schemes_to_try = [scheme] if scheme == "https" else ["http", "https"]
+        schemes_to_try = [scheme]
+        if scheme == "https":
+            schemes_to_try.append("http")
+        else:
+            schemes_to_try.append("https")
         for s in schemes_to_try:
             candidates.append((f"{s}://{host}:{port_to_check}/video/mjpeg", f"{s.upper()} (/video/mjpeg)", False))
             if clean_path != "/video/mjpeg":
@@ -453,11 +496,13 @@ class AndroidIPCameraStream:
 
             try:
                 stream = urllib.request.urlopen(req, timeout=3.5, **kwargs)
+                self._active_http_resp = stream
             except urllib.error.HTTPError as he:
                 if he.code == 404 and self.url.endswith("/video"):
                     self.url = self.url + "/mjpeg"
                     req = urllib.request.Request(self.url, headers={"User-Agent": "Mozilla/5.0", "Accept": "*/*"})
                     stream = urllib.request.urlopen(req, timeout=3.5, **kwargs)
+                    self._active_http_resp = stream
                 else:
                     raise
 
@@ -505,20 +550,36 @@ class AndroidIPCameraStream:
     def get_fps(self):
         return self.fps
 
-    def stop(self):
-        """Gracefully disconnects and stops background thread."""
-        self.is_running = False
-        if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=1.0)
+    def reconnect(self):
+        """Forces immediate socket/capture refresh and stream reconnect."""
+        resp = getattr(self, "_active_http_resp", None)
+        if resp:
+            try:
+                resp.close()
+            except Exception:
+                pass
+            self._active_http_resp = None
         if self.cap:
             try:
                 self.cap.release()
             except Exception:
                 pass
+            self.cap = None
+
+    def stop(self):
+        """Gracefully disconnects and stops background thread."""
+        self.is_running = False
+        if hasattr(self, "reconnect"):
+            self.reconnect()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=1.0)
         self.cap = None
         self.grabbed = False
         self.frame = None
         self.status_message = "Disconnected"
+
+
+
 
 
 # =====================================================================

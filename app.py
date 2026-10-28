@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 import cv2
 import numpy as np
-from flask import Flask, jsonify, request, send_from_directory, Response, session
+from flask import Flask, jsonify, request, send_from_directory, Response, session, send_file
 
 # Resolve root and bundle paths (supports standalone PyInstaller exe)
 if getattr(sys, "frozen", False):
@@ -322,7 +322,20 @@ def api_configure_ip_camera():
     if not custom_url and not ip:
         return jsonify({"success": False, "message": "Please provide an IP address or full stream URL."}), 400
 
-    target_url = custom_url
+    # Ensure custom_url is only used if path is custom/rtsp or matches the provided ip
+    use_custom = False
+    if custom_url:
+        clean_path = path.lower()
+        if clean_path in ("custom", "rtsp") or not ip:
+            use_custom = True
+        else:
+            import urllib.parse
+            ip_host = urllib.parse.urlparse(ip).hostname if "://" in ip else ip.split(":")[0]
+            custom_host = urllib.parse.urlparse(custom_url).hostname or ""
+            if custom_host and custom_host == ip_host:
+                use_custom = True
+
+    target_url = custom_url if use_custom else ""
     if not target_url:
         probe = test_ip_camera_stream(ip, port=port, path=path, timeout=3.0)
         if probe.get("success") and probe.get("url"):
@@ -357,6 +370,8 @@ def api_configure_ip_camera():
         "url": target_url,
         "is_active": activate
     })
+
+
 
 @flask_app.route("/api/camera/select-source", methods=["POST"])
 def api_select_camera_source():
@@ -855,6 +870,62 @@ def api_select_timetable():
     )
     return jsonify({"success": success, "message": msg, "session": session_info})
 
+@flask_app.route("/api/faculty/assignments", methods=["GET"])
+def api_get_faculty_assignments():
+    """Returns faculty teaching assignments grouped by class and subject from timetable/HOD decisions."""
+    fac_id = request.args.get("faculty_id") or ""
+    fac_name = request.args.get("instructor") or ""
+
+    with production_db.get_connection() as conn:
+        cur = conn.cursor()
+        query = """
+            SELECT class_code, subject_code, subject_name, room, time_slot, day, faculty_id, faculty_name
+            FROM timetable_entries
+            WHERE 1=1
+        """
+        params = []
+        if fac_id:
+            query += " AND (faculty_id = ? OR faculty_name LIKE ?)"
+            params.extend([fac_id, f"%{fac_id}%"])
+        elif fac_name:
+            query += " AND faculty_name LIKE ?"
+            params.append(f"%{fac_name}%")
+
+        query += " ORDER BY class_code ASC, subject_name ASC;"
+        cur.execute(query, params)
+        rows = [dict(r) for r in cur.fetchall()]
+
+        if not rows:
+            cur.execute("SELECT class_code, subject_code, subject_name, room, time_slot, day, faculty_id, faculty_name FROM timetable_entries ORDER BY class_code ASC, subject_name ASC;")
+            rows = [dict(r) for r in cur.fetchall()]
+
+        classes_map = {}
+        for r in rows:
+            c_code = r["class_code"]
+            if c_code not in classes_map:
+                cur.execute("SELECT COUNT(*) as count FROM students WHERE division = ? OR division = ?;", (c_code, c_code.replace(" ", "")))
+                row_cnt = cur.fetchone()
+                enrolled_count = row_cnt["count"] if row_cnt else 0
+                classes_map[c_code] = {
+                    "class_code": c_code,
+                    "enrolled_count": enrolled_count,
+                    "faculty_name": r["faculty_name"],
+                    "subjects": []
+                }
+            if not any(s["code"] == r["subject_code"] for s in classes_map[c_code]["subjects"]):
+                classes_map[c_code]["subjects"].append({
+                    "code": r["subject_code"],
+                    "name": r["subject_name"],
+                    "room": r["room"],
+                    "time_slot": r["time_slot"],
+                    "day": r["day"]
+                })
+
+        return jsonify({
+            "success": True,
+            "classes": list(classes_map.values())
+        })
+
 # ================= Authentication & Security Questions API =================
 current_authenticated_user = None
 
@@ -936,11 +1007,18 @@ def api_auth_switch_role():
     target_role = data.get("role", "faculty").strip().lower()
 
     if target_role == "hod":
-        user = production_db.authenticate_user("HOD01", "admin", "hod")
+        with production_db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT user_id, password FROM users WHERE LOWER(role) IN ('hod', 'admin') LIMIT 1;")
+            hod_row = cur.fetchone()
+        if hod_row:
+            user = production_db.authenticate_user(hod_row["user_id"], hod_row["password"], "hod")
+        else:
+            user = None
     else:
         with production_db.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT user_id, password FROM users WHERE role = 'faculty' LIMIT 1;")
+            cur.execute("SELECT user_id, password FROM users WHERE LOWER(role) = 'faculty' LIMIT 1;")
             fac_row = cur.fetchone()
         if fac_row:
             user = production_db.authenticate_user(fac_row["user_id"], fac_row["password"], "faculty")
@@ -972,6 +1050,21 @@ def api_auth_forgot_password():
     status_code = 200 if success else 400
     return jsonify({"success": success, "message": msg}), status_code
 
+@flask_app.route("/api/auth/security-questions", methods=["GET"])
+def api_auth_security_questions():
+    """Retrieve security questions for a given User ID for password recovery."""
+    uid = request.args.get("user_id", "").strip()
+    if not uid:
+        return jsonify({"success": False, "message": "User ID is required."}), 400
+    user = production_db.get_user_by_id(uid)
+    if not user:
+        return jsonify({"success": False, "message": f"User '{uid}' not found."}), 404
+    return jsonify({
+        "success": True,
+        "sec_q1": user.get("sec_q1") or "What is your primary academic department?",
+        "sec_q2": user.get("sec_q2") or "What is your university security code?"
+    })
+
 # ================= HOD Portal Management Endpoints =================
 @flask_app.route("/api/hod/students", methods=["GET"])
 def api_hod_students():
@@ -984,9 +1077,22 @@ def api_hod_student_attendance(student_id):
     """HOD Portal: Multi-subject attendance breakdown for selected student."""
     records = production_db.get_student_multi_subject_attendance(student_id)
     student = production_db.get_student_by_id(student_id)
+    
+    tot_att = sum(r.get("attended", 0) for r in records)
+    tot_cls = sum(r.get("total", 0) for r in records)
+    overall_pct = round((tot_att * 100.0) / tot_cls, 1) if tot_cls > 0 else 0.0
+
+    if student:
+        student["total_attended"] = tot_att
+        student["total_classes"] = tot_cls
+        student["overall_attendance_pct"] = overall_pct
+
     return jsonify({
         "student": student,
-        "subjects": records
+        "subjects": records,
+        "overall_attendance_pct": overall_pct,
+        "total_attended": tot_att,
+        "total_classes": tot_cls
     })
 
 @flask_app.route("/api/hod/student/attendance/override", methods=["POST"])
@@ -1016,13 +1122,13 @@ def api_hod_get_subjects():
 
 @flask_app.route("/api/hod/subjects/add", methods=["POST"])
 def api_hod_add_subject():
-    """HOD Portal: Add new subject and assign to faculty."""
+    """HOD Portal: Add new subject / course without requiring teacher assignment."""
     data = request.get_json(silent=True) or {}
     code = data.get("code", "").strip()
     name = data.get("name", "").strip()
     dept = data.get("department", "Computer Science").strip()
     credits = int(data.get("credits", 3))
-    faculty_id = data.get("faculty_id", "").strip()
+    faculty_id = (data.get("faculty_id") or data.get("assigned_faculty_id") or "").strip() or None
     room = data.get("room", "").strip()
 
     if not code or not name:
@@ -1052,13 +1158,17 @@ def api_hod_add_class():
 
 @flask_app.route("/api/hod/faculty", methods=["GET"])
 def api_hod_get_faculty():
-    """HOD Portal: Faculty list with teaching schedules, subjects, and login credentials."""
+    """HOD Portal: Faculty list with teaching schedules, subjects, login credentials, and security Q&A."""
     with production_db.get_connection() as conn:
         cur = conn.cursor()
         cur.execute("""
             SELECT i.employee_id, i.name, i.email, i.department, i.role,
                    COALESCE(u.user_id, i.employee_id) as user_id,
-                   COALESCE(u.password, 'faculty') as password
+                   COALESCE(u.password, 'faculty') as password,
+                   COALESCE(u.sec_q1, 'What is your primary academic department?') as sec_q1,
+                   COALESCE(u.sec_a1, i.department) as sec_a1,
+                   COALESCE(u.sec_q2, 'What is your university security code?') as sec_q2,
+                   COALESCE(u.sec_a2, '2026') as sec_a2
             FROM instructors i
             LEFT JOIN users u ON LOWER(i.employee_id) = LOWER(u.user_id)
             ORDER BY i.employee_id ASC;
@@ -1082,7 +1192,7 @@ def api_hod_get_faculty():
 
 @flask_app.route("/api/hod/faculty/add", methods=["POST"])
 def api_hod_add_faculty():
-    """HOD Portal: Create and register new faculty account and instructor profile."""
+    """HOD Portal: Create and register new faculty account and instructor profile with security questions."""
     data = request.get_json(silent=True) or {}
     emp_id = data.get("employee_id", "").strip()
     name = data.get("name", "").strip()
@@ -1090,12 +1200,38 @@ def api_hod_add_faculty():
     dept = data.get("department", "Computer Science").strip()
     role = data.get("role", "Assistant Professor").strip()
     pwd = data.get("password", "faculty").strip()
+    sec_q1 = data.get("sec_q1")
+    sec_a1 = data.get("sec_a1")
+    sec_q2 = data.get("sec_q2")
+    sec_a2 = data.get("sec_a2")
     actor = data.get("actor", "HOD")
 
     if not emp_id or not name:
         return jsonify({"success": False, "message": "Faculty Employee ID and Full Name are required."}), 400
 
-    success, msg = production_db.add_faculty(emp_id, name, email, dept, role, pwd, actor=actor)
+    success, msg = production_db.add_faculty(
+        emp_id, name, email, dept, role, pwd,
+        sec_q1=sec_q1, sec_a1=sec_a1, sec_q2=sec_q2, sec_a2=sec_a2,
+        actor=actor
+    )
+    return jsonify({"success": success, "message": msg}), (200 if success else 400)
+
+@flask_app.route("/api/hod/faculty/security-questions", methods=["POST"])
+@flask_app.route("/api/hod/faculty/<employee_id>/security", methods=["POST", "PUT"])
+def api_hod_update_faculty_security(employee_id=None):
+    """HOD Portal: Update security questions and answers for a faculty member."""
+    data = request.get_json(silent=True) or {}
+    emp_id = employee_id or data.get("employee_id", "").strip()
+    sec_q1 = data.get("sec_q1", "").strip()
+    sec_a1 = data.get("sec_a1", "").strip()
+    sec_q2 = data.get("sec_q2", "").strip()
+    sec_a2 = data.get("sec_a2", "").strip()
+    actor = data.get("actor", "HOD")
+
+    if not emp_id or not sec_q1 or not sec_a1 or not sec_q2 or not sec_a2:
+        return jsonify({"success": False, "message": "Faculty Employee ID and all security questions/answers are required."}), 400
+
+    success, msg = production_db.update_faculty_security(emp_id, sec_q1, sec_a1, sec_q2, sec_a2, actor=actor)
     return jsonify({"success": success, "message": msg}), (200 if success else 400)
 
 @flask_app.route("/api/hod/timetable", methods=["GET"])
@@ -1241,12 +1377,275 @@ def api_session_submit():
     actor = data.get("submitted_by", "Faculty")
     records = data.get("records")
 
+    curr_sess = production_db.get_current_session_info()
+    subject_code = data.get("subject_code") or curr_sess.get("course_code") or "AGCS2102"
+    subject_name = data.get("subject_name") or curr_sess.get("course_name") or "Data Science"
+    section_code = data.get("section_code") or data.get("class_code") or curr_sess.get("section_code") or "CS-3A"
+
     if records and isinstance(records, list) and len(records) > 0:
-        success, msg = production_db.save_attendance_records(session_id, records, actor)
+        success, msg = production_db.save_attendance_records(
+            session_id, records, actor,
+            subject_code=subject_code,
+            subject_name=subject_name,
+            section_code=section_code
+        )
     else:
         success, msg = production_db.submit_attendance_session(session_id, actor)
 
+    if success:
+        attendance_session_state["matched_students"].clear()
+        attendance_session_state["unknown_persons"].clear()
+
     return jsonify({"success": success, "message": msg}), (200 if success else 400)
+
+@flask_app.route("/api/attendance/subject-record", methods=["GET"])
+def api_get_subject_attendance_record():
+    """Returns student-wise attendance records and session history for a subject filtered by class."""
+    sub_code = request.args.get("subject_code") or "AGCS2102"
+    class_code = request.args.get("class_code") or "all"
+    data = production_db.get_subject_attendance_records(sub_code, class_code)
+    return jsonify(data)
+
+@flask_app.route("/api/faculty/my-subjects", methods=["GET"])
+def api_get_faculty_subjects():
+    """Returns subjects taught by current faculty or all department subjects."""
+    fac_id = request.args.get("faculty_id") or ""
+    if not fac_id and session.get("user"):
+        fac_id = session["user"].get("user_id", "")
+
+    with production_db.get_connection() as conn:
+        cur = conn.cursor()
+        rows = []
+        if fac_id:
+            cur.execute("""
+                SELECT code, name, department, credits, assigned_faculty_id, assigned_faculty_name, room
+                FROM department_subjects
+                WHERE assigned_faculty_id = ? OR UPPER(assigned_faculty_name) LIKE ?;
+            """, (fac_id, f"%{fac_id}%"))
+            rows = [dict(r) for r in cur.fetchall()]
+
+            cur.execute("""
+                SELECT DISTINCT s.code, s.name, s.department, s.credits, s.assigned_faculty_id, s.assigned_faculty_name, s.room
+                FROM timetable_entries t
+                JOIN department_subjects s ON UPPER(t.subject_code) = UPPER(s.code)
+                WHERE t.faculty_id = ? OR UPPER(t.faculty_name) LIKE ?;
+            """, (fac_id, f"%{fac_id}%"))
+            for tr_row in cur.fetchall():
+                d_row = dict(tr_row)
+                if not any(r["code"] == d_row["code"] for r in rows):
+                    rows.append(d_row)
+
+        if not rows:
+            cur.execute("""
+                SELECT code, name, department, credits, assigned_faculty_id, assigned_faculty_name, room
+                FROM department_subjects
+                ORDER BY code ASC;
+            """)
+            rows = [dict(r) for r in cur.fetchall()]
+
+    return jsonify({"success": True, "subjects": rows})
+
+@flask_app.route("/api/attendance/export-pdf", methods=["GET"])
+def api_export_attendance_pdf():
+    """Generates official academic attendance sheet as PDF for a specific subject and class."""
+    sub_code = request.args.get("subject_code") or "AGCS2102"
+    class_code = request.args.get("class_code") or "all"
+
+    data = production_db.get_subject_attendance_records(sub_code, class_code)
+    subject = data.get("subject", {})
+    summary = data.get("summary", {})
+    students = data.get("students", [])
+
+    import io
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, HRFlowable, KeepTogether
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=A4,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=36,
+        bottomMargin=36
+    )
+
+    styles = getSampleStyleSheet()
+
+    header_title_style = ParagraphStyle(
+        "HeaderTitle",
+        parent=styles["Heading1"],
+        fontSize=15,
+        leading=18,
+        textColor=colors.HexColor("#0f172a"),
+        alignment=1,
+        fontName="Helvetica-Bold",
+        spaceAfter=3
+    )
+
+    sub_header_style = ParagraphStyle(
+        "SubHeader",
+        parent=styles["Normal"],
+        fontSize=9,
+        leading=12,
+        textColor=colors.HexColor("#475569"),
+        alignment=1,
+        fontName="Helvetica",
+        spaceAfter=1
+    )
+
+    badge_title_style = ParagraphStyle(
+        "BadgeTitle",
+        parent=styles["Heading2"],
+        fontSize=11,
+        leading=14,
+        textColor=colors.HexColor("#1e3a8a"),
+        alignment=1,
+        fontName="Helvetica-Bold",
+        spaceBefore=6,
+        spaceAfter=10
+    )
+
+    meta_label = ParagraphStyle("MetaLabel", fontSize=8, leading=10, textColor=colors.HexColor("#475569"), fontName="Helvetica-Bold")
+    meta_val = ParagraphStyle("MetaVal", fontSize=8, leading=10, textColor=colors.HexColor("#0f172a"), fontName="Helvetica")
+
+    cell_style = ParagraphStyle("CellText", fontSize=8, leading=10, textColor=colors.HexColor("#1e293b"), fontName="Helvetica")
+    cell_bold = ParagraphStyle("CellBold", fontSize=8, leading=10, textColor=colors.HexColor("#0f172a"), fontName="Helvetica-Bold")
+    cell_center = ParagraphStyle("CellCenter", fontSize=8, leading=10, textColor=colors.HexColor("#1e293b"), fontName="Helvetica", alignment=1)
+
+    story = []
+
+    # Institution Header
+    story.append(Paragraph("AMRITSAR GROUP OF COLLEGES", header_title_style))
+    story.append(Paragraph("Autonomous Institute · Affiliated to I.K. Gujral Punjab Technical University (IKGPTU)", sub_header_style))
+    story.append(Paragraph("Department of Computer Science & Engineering", sub_header_style))
+    story.append(Spacer(1, 4))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor("#1e3a8a"), spaceAfter=8))
+
+    # Report Title
+    story.append(Paragraph("OFFICIAL SUBJECT ATTENDANCE & ELIGIBILITY REPORT", badge_title_style))
+
+    # Meta Table
+    sub_title = f"{subject.get('code', sub_code)} — {subject.get('name', 'Course')}"
+    faculty_assigned = subject.get("assigned_faculty_name") or "Department Faculty"
+    gen_time = datetime.now().strftime("%d-%b-%Y %I:%M %p")
+    sec_display = "All Class Sections" if class_code.lower() == "all" else f"Section: {class_code}"
+
+    meta_data = [
+        [
+            Paragraph("<b>Subject:</b>", meta_label), Paragraph(sub_title, meta_val),
+            Paragraph("<b>Faculty / Instructor:</b>", meta_label), Paragraph(faculty_assigned, meta_val)
+        ],
+        [
+            Paragraph("<b>Class / Section:</b>", meta_label), Paragraph(sec_display, meta_val),
+            Paragraph("<b>Date Generated:</b>", meta_label), Paragraph(gen_time, meta_val)
+        ],
+        [
+            Paragraph("<b>Total Students:</b>", meta_label), Paragraph(str(summary.get("total_students", len(students))), meta_val),
+            Paragraph("<b>Classes Conducted:</b>", meta_label), Paragraph(str(summary.get("total_classes", 0)), meta_val)
+        ],
+        [
+            Paragraph("<b>Average Attendance:</b>", meta_label), Paragraph(f"{summary.get('average_attendance', 0.0)}%", meta_val),
+            Paragraph("<b>Eligibility Breakdown:</b>", meta_label), Paragraph(f"Eligible: {summary.get('eligible_count', 0)} | Shortage: {summary.get('shortage_count', 0)}", meta_val)
+        ]
+    ]
+    meta_table = Table(meta_data, colWidths=[1.1*inch, 2.5*inch, 1.4*inch, 2.3*inch])
+    meta_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor("#f8fafc")),
+        ('BOX', (0, 0), (-1, -1), 0.75, colors.HexColor("#cbd5e1")),
+        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#e2e8f0")),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+    ]))
+    story.append(meta_table)
+    story.append(Spacer(1, 12))
+
+    # Main Attendance Table
+    table_headers = [
+        Paragraph("<b>#</b>", cell_bold),
+        Paragraph("<b>Student ID</b>", cell_bold),
+        Paragraph("<b>Student Name</b>", cell_bold),
+        Paragraph("<b>Section</b>", cell_bold),
+        Paragraph("<b>Attended / Total</b>", cell_center),
+        Paragraph("<b>Attendance %</b>", cell_center),
+        Paragraph("<b>Status / Eligibility</b>", cell_center),
+        Paragraph("<b>Remarks</b>", cell_style)
+    ]
+
+    table_rows = [table_headers]
+    for idx, st in enumerate(students):
+        elig = st.get("eligibility", "Pending")
+        pct = st.get("percentage", 0.0)
+
+        if elig == "Eligible":
+            status_html = f"<font color='#16a34a'><b>Eligible (≥75%)</b></font>"
+        elif elig == "Shortage":
+            status_html = f"<font color='#dc2626'><b>Shortage (&lt;75%)</b></font>"
+        else:
+            status_html = f"<font color='#64748b'>No Records</font>"
+
+        table_rows.append([
+            Paragraph(str(idx + 1), cell_style),
+            Paragraph(f"<b>{st.get('student_id', '')}</b>", cell_style),
+            Paragraph(st.get("name", ""), cell_bold),
+            Paragraph(st.get("division", ""), cell_style),
+            Paragraph(f"{st.get('attended', 0)} / {st.get('total', 0)}", cell_center),
+            Paragraph(f"<b>{pct}%</b>", cell_center),
+            Paragraph(status_html, cell_center),
+            Paragraph(st.get("remarks") or "Regular", cell_style)
+        ])
+
+    if len(table_rows) == 1:
+        table_rows.append([Paragraph("No enrolled students found for this subject/section.", cell_style)] + [Paragraph("", cell_style)]*7)
+
+    col_widths = [0.35*inch, 1.1*inch, 1.7*inch, 0.75*inch, 1.1*inch, 0.95*inch, 1.25*inch, 0.9*inch]
+    att_table = Table(table_rows, colWidths=col_widths, repeatRows=1)
+    att_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#1e293b")),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 5),
+        ('TOPPADDING', (0, 0), (-1, 0), 5),
+        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor("#cbd5e1")),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor("#f8fafc")]),
+        ('TOPPADDING', (0, 1), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 4),
+    ]))
+    story.append(att_table)
+    story.append(Spacer(1, 24))
+
+    # Signatures footer
+    sig_data = [
+        [
+            Paragraph("____________________________<br/><b>Subject Teacher / Faculty</b>", cell_center),
+            Paragraph("____________________________<br/><b>Head of Department (CSE)</b>", cell_center),
+            Paragraph("____________________________<br/><b>Dean Academic Affairs</b>", cell_center)
+        ]
+    ]
+    sig_table = Table(sig_data, colWidths=[2.4*inch, 2.4*inch, 2.4*inch])
+    sig_table.setStyle(TableStyle([
+        ('TOPPADDING', (0, 0), (-1, -1), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER')
+    ]))
+    story.append(KeepTogether([sig_table]))
+
+    doc.build(story)
+    buffer.seek(0)
+
+    clean_sub_filename = sub_code.replace(" ", "_")
+    clean_cls_filename = class_code.replace(" ", "_")
+    download_name = f"Attendance_Report_{clean_sub_filename}_{clean_cls_filename}.pdf"
+
+    return send_file(
+        buffer,
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=download_name
+    )
 
 @flask_app.route("/api/review/decision", methods=["POST"])
 def api_review_decision():

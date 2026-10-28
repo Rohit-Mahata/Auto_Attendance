@@ -430,7 +430,20 @@ class ProductionDatabase:
                 );
             """)
 
+            # Schema migrations/column additions
+            for col, col_type in [
+                ("subject_code", "TEXT"),
+                ("subject_name", "TEXT"),
+                ("section_code", "TEXT"),
+                ("instructor", "TEXT")
+            ]:
+                try:
+                    cur.execute(f"ALTER TABLE sessions ADD COLUMN {col} {col_type};")
+                except Exception:
+                    pass
+
             conn.commit()
+            self._sync_student_subject_attendance(cur, conn)
             self._seed_production_metadata(cur, conn)
 
     def _seed_production_metadata(self, cur, conn):
@@ -469,6 +482,60 @@ class ProductionDatabase:
         """)
 
         conn.commit()
+
+    def _sync_student_subject_attendance(self, cur, conn):
+        """Recomputes student_subject_attendance from historical submitted attendance_records."""
+        try:
+            cur.execute("""
+                SELECT ar.student_id as internal_id, s.student_id, ar.status,
+                       COALESCE(sess.subject_code, c.code, 'AGCS2102') as subject_code,
+                       COALESCE(sess.subject_name, c.name, 'Data Science') as subject_name,
+                       ar.decided_at
+                FROM attendance_records ar
+                JOIN students s ON ar.student_id = s.id
+                JOIN sessions sess ON ar.session_id = sess.id
+                LEFT JOIN sections sec ON sess.section_id = sec.id
+                LEFT JOIN courses c ON sec.course_id = c.id
+                WHERE sess.state = 'submitted'
+                ORDER BY ar.id ASC;
+            """)
+            rows = cur.fetchall()
+            if not rows:
+                return
+
+            counts = {}
+            for r in rows:
+                sid = r["student_id"]
+                sub_code = (r["subject_code"] or "AGCS2102").strip().upper()
+                sub_name = (r["subject_name"] or "Data Science").strip()
+                status = (r["status"] or "absent").strip().lower()
+                is_pres = 1 if status in ("present", "late") else 0
+                key = (sid, sub_code)
+                if key not in counts:
+                    counts[key] = {
+                        "attended": 0,
+                        "total": 0,
+                        "subject_name": sub_name,
+                        "last_status": status.capitalize(),
+                        "last_at": r["decided_at"]
+                    }
+                counts[key]["total"] += 1
+                counts[key]["attended"] += is_pres
+                counts[key]["last_status"] = status.capitalize()
+                counts[key]["last_at"] = r["decided_at"]
+
+            for (sid, sub_code), data in counts.items():
+                tot = data["total"]
+                att = data["attended"]
+                pct = round((att * 100.0) / tot, 1) if tot > 0 else 0.0
+                cur.execute("""
+                    INSERT OR REPLACE INTO student_subject_attendance (
+                        student_id, subject_code, subject_name, attended, total, percentage, last_status, last_marked_at, override_by, remarks
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'SystemSync', 'Synchronized from verified attendance records');
+                """, (sid, sub_code, data["subject_name"], att, tot, pct, data["last_status"], data["last_at"]))
+            conn.commit()
+        except Exception as e:
+            print(f"[Database] Notice: sync_student_subject_attendance: {e}")
 
     # ================= Audit Logging =================
     def log_audit(self, actor: str, action: str, target_type: str, target_id: str, before: Optional[str] = None, after: Optional[str] = None):
@@ -558,7 +625,20 @@ class ProductionDatabase:
     def get_student_by_id(self, student_id: str) -> Optional[Dict[str, Any]]:
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT * FROM students WHERE student_id = ? OR id = ?;", (student_id, student_id))
+            cur.execute("""
+                SELECT s.*,
+                       COALESCE(s.division, 'CSE 3') as class_code,
+                       COALESCE(SUM(sa.attended), 0) as total_attended,
+                       COALESCE(SUM(sa.total), 0) as total_classes,
+                       CASE 
+                           WHEN SUM(sa.total) > 0 THEN ROUND((SUM(sa.attended) * 100.0) / SUM(sa.total), 1)
+                           ELSE 0.0 
+                       END as overall_attendance_pct
+                FROM students s
+                LEFT JOIN student_subject_attendance sa ON s.student_id = sa.student_id
+                WHERE s.student_id = ? OR s.id = ?
+                GROUP BY s.id;
+            """, (student_id, student_id))
             row = cur.fetchone()
             return dict(row) if row else None
 
@@ -576,7 +656,20 @@ class ProductionDatabase:
     def get_all_students(self) -> List[Dict[str, Any]]:
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT * FROM students ORDER BY student_id ASC;")
+            cur.execute("""
+                SELECT s.*,
+                       COALESCE(s.division, 'CSE 3') as class_code,
+                       COALESCE(SUM(sa.attended), 0) as total_attended,
+                       COALESCE(SUM(sa.total), 0) as total_classes,
+                       CASE 
+                           WHEN SUM(sa.total) > 0 THEN ROUND((SUM(sa.attended) * 100.0) / SUM(sa.total), 1)
+                           ELSE 0.0 
+                       END as overall_attendance_pct
+                FROM students s
+                LEFT JOIN student_subject_attendance sa ON s.student_id = sa.student_id
+                GROUP BY s.id
+                ORDER BY s.student_id ASC;
+            """)
             return [dict(r) for r in cur.fetchall()]
 
     def get_student_portal_data(self, student_id: str) -> Optional[Dict[str, Any]]:
@@ -863,19 +956,34 @@ class ProductionDatabase:
             self.log_audit(submitted_by, "SUBMIT_SESSION_ATTENDANCE", "sessions", str(session_id), after="submitted")
             return True, f"Session {session_id} submitted successfully."
 
-    def save_attendance_records(self, session_id: int, records: list, actor: str = "Faculty") -> Tuple[bool, str]:
+    def save_attendance_records(
+        self,
+        session_id: int,
+        records: list,
+        actor: str = "Faculty",
+        subject_code: Optional[str] = None,
+        subject_name: Optional[str] = None,
+        section_code: Optional[str] = None
+    ) -> Tuple[bool, str]:
         """
         Saves full attendance list with present/absent status for every student in session.
-        Inserts/updates attendance_records and student_subject_attendance tables.
+        Inserts/updates attendance_records and student_subject_attendance tables accurately.
         """
         now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with self.get_connection() as conn:
             cur = conn.cursor()
+
+            # Resolve subject_code and subject_name
+            cur_code = (subject_code or "").strip().upper()
+            cur_name = (subject_name or "").strip()
+
             # Ensure session exists or create it
             cur.execute("""
-                SELECT s.id, COALESCE(sec.course_id, 1) as course_id 
+                SELECT s.id, COALESCE(sec.course_id, 1) as course_id,
+                       c.code as c_code, c.name as c_name, sec.section_code as sec_code
                 FROM sessions s 
                 LEFT JOIN sections sec ON s.section_id = sec.id 
+                LEFT JOIN courses c ON sec.course_id = c.id
                 WHERE s.id = ?;
             """, (session_id,))
             s_row = cur.fetchone()
@@ -904,6 +1012,19 @@ class ProductionDatabase:
                 """, (session_id, sec_id, r_id, now_str, now_str))
             else:
                 course_id = s_row["course_id"] or 1
+                if not cur_code and s_row["c_code"]:
+                    cur_code = s_row["c_code"].strip().upper()
+                if not cur_name and s_row["c_name"]:
+                    cur_name = s_row["c_name"].strip()
+                if not section_code and s_row["sec_code"]:
+                    section_code = s_row["sec_code"]
+
+            if not cur_code:
+                cur_code = "AGCS2102"
+            if not cur_name:
+                cur.execute("SELECT name FROM department_subjects WHERE UPPER(code) = ?;", (cur_code,))
+                sub_r = cur.fetchone()
+                cur_name = sub_r["name"] if sub_r else "Data Science"
 
             saved_present = 0
             saved_absent = 0
@@ -929,18 +1050,43 @@ class ProductionDatabase:
                             updated_at = excluded.updated_at;
                     """, (session_id, st_id, norm_status, norm_source, actor, now_str, now_str))
 
-                    if norm_status in ("present", "late"):
+                    is_attended = 1 if norm_status in ("present", "late") else 0
+                    if is_attended:
                         saved_present += 1
                     else:
                         saved_absent += 1
 
-            # Finalize session state to submitted
-            cur.execute("UPDATE sessions SET state = 'submitted' WHERE id = ?;", (session_id,))
+                    # Update student_subject_attendance
+                    cur.execute("""
+                        SELECT attended, total FROM student_subject_attendance
+                        WHERE student_id = ? AND UPPER(subject_code) = ?;
+                    """, (sid_str, cur_code))
+                    sa_row = cur.fetchone()
+                    if sa_row:
+                        new_att = sa_row["attended"] + is_attended
+                        new_tot = sa_row["total"] + 1
+                    else:
+                        new_att = is_attended
+                        new_tot = 1
+                    new_pct = round((new_att * 100.0) / new_tot, 1) if new_tot > 0 else 0.0
+
+                    cur.execute("""
+                        INSERT OR REPLACE INTO student_subject_attendance (
+                            student_id, subject_code, subject_name, attended, total, percentage, last_status, last_marked_at, override_by, remarks
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    """, (sid_str, cur_code, cur_name, new_att, new_tot, new_pct, norm_status.capitalize(), now_str, actor, f"Session {session_id} Attendance ({norm_status.capitalize()})"))
+
+            # Finalize session state and metadata
+            cur.execute("""
+                UPDATE sessions 
+                SET state = 'submitted', subject_code = ?, subject_name = ?, instructor = ?, section_code = ?
+                WHERE id = ?;
+            """, (cur_code, cur_name, actor, section_code, session_id))
             conn.commit()
 
         total = saved_present + saved_absent
         self.log_audit(actor, "SUBMIT_ATTENDANCE_RECORDS", "attendance_records", str(session_id),
-                       after=f"Saved {total} records: {saved_present} present, {saved_absent} absent")
+                       after=f"Subject {cur_code}: Saved {total} records: {saved_present} present, {saved_absent} absent")
         return True, f"Attendance successfully saved to database: {saved_present} Present, {saved_absent} Absent."
 
     # ================= Student Portal & Data Governance =================
@@ -1280,7 +1426,7 @@ class ProductionDatabase:
             cur.execute("SELECT id FROM cameras LIMIT 1;")
             cam_row = cur.fetchone()
             if not cam_row:
-                cur.execute("INSERT INTO cameras (room_id, stream_url, name) VALUES (?, '0', 'Classroom Webcam');", (room_id,))
+                cur.execute("INSERT INTO cameras (room_id, rtsp_url, name, status, last_seen) VALUES (?, '0', 'Classroom Webcam', 'online', datetime('now'));", (room_id,))
                 cam_id = cur.lastrowid
             else:
                 cam_id = cam_row[0]
@@ -1374,43 +1520,34 @@ class ProductionDatabase:
         clean_pwd = password.strip()
         clean_role = role.strip().lower()
 
+        if not clean_uid or not clean_pwd:
+            return None
+
         with self.get_connection() as conn:
             cur = conn.cursor()
+
+            # Validate credentials strictly against database users table
+            # For HOD, accept institutional identifiers (HOD01, admin, hod)
             cur.execute("""
-                SELECT user_id, name, role, department, sec_q1, sec_q2
+                SELECT user_id, name, role, department, password
                 FROM users
-                WHERE LOWER(user_id) = LOWER(?) AND password = ? AND LOWER(role) = LOWER(?);
-            """, (clean_uid, clean_pwd, clean_role))
+                WHERE (
+                    LOWER(user_id) = LOWER(?)
+                    OR LOWER(name) = LOWER(?)
+                    OR (LOWER(role) = 'hod' AND LOWER(?) IN ('admin', 'hod', 'hod01'))
+                )
+                AND LOWER(role) = LOWER(?);
+            """, (clean_uid, clean_uid, clean_uid, clean_role))
             row = cur.fetchone()
             if row:
-                return dict(row)
-
-            # Fallback: check instructors table if role is faculty
-            if clean_role == "faculty":
-                cur.execute("""
-                    SELECT employee_id, name, department
-                    FROM instructors
-                    WHERE LOWER(employee_id) = LOWER(?);
-                """, (clean_uid,))
-                inst = cur.fetchone()
-                if inst:
-                    # Check if there is an existing password in users, or if default is 'faculty'
-                    cur.execute("SELECT password FROM users WHERE LOWER(user_id) = LOWER(?);", (clean_uid,))
-                    u_row = cur.fetchone()
-                    expected_pwd = u_row["password"] if u_row else "faculty"
-                    if clean_pwd == expected_pwd:
-                        # Auto-sync into users table
-                        cur.execute("""
-                            INSERT OR REPLACE INTO users (user_id, name, role, password, department, sec_q1, sec_a1, sec_q2, sec_a2)
-                            VALUES (?, ?, 'faculty', ?, ?, 'What is your primary academic department?', ?, 'What is your university security code?', '2026');
-                        """, (inst["employee_id"], inst["name"], clean_pwd, inst["department"], inst["department"]))
-                        conn.commit()
-                        return {
-                            "user_id": inst["employee_id"],
-                            "name": inst["name"],
-                            "role": "faculty",
-                            "department": inst["department"]
-                        }
+                stored_pwd = row["password"] or ""
+                if clean_pwd == stored_pwd:
+                    return {
+                        "user_id": row["user_id"],
+                        "name": row["name"],
+                        "role": row["role"],
+                        "department": row["department"]
+                    }
 
             return None
 
@@ -1443,8 +1580,10 @@ class ProductionDatabase:
             cur.execute("UPDATE users SET password = ? WHERE user_id = ?;", (new_pass.strip(), row["user_id"]))
             conn.commit()
             self.log_audit(user_id, "RESET_PASSWORD_SECURITY_QUESTIONS", "users", user_id, after="Password updated successfully")
+            return True, "Password updated successfully."
+
     # ================= HOD: Faculty Management =================
-    def add_faculty(self, employee_id: str, name: str, email: str = "", department: str = "Computer Science", role: str = "Assistant Professor", password: str = "faculty", actor: str = "HOD") -> Tuple[bool, str]:
+    def add_faculty(self, employee_id: str, name: str, email: str = "", department: str = "Computer Science", role: str = "Assistant Professor", password: str = "faculty", sec_q1: Optional[str] = None, sec_a1: Optional[str] = None, sec_q2: Optional[str] = None, sec_a2: Optional[str] = None, actor: str = "HOD") -> Tuple[bool, str]:
         emp_id = employee_id.strip().upper()
         name_clean = name.strip()
         if not emp_id or not name_clean:
@@ -1454,6 +1593,10 @@ class ProductionDatabase:
         dept_clean = department.strip() if department else "Computer Science"
         role_clean = role.strip() if role else "Assistant Professor"
         pwd_clean = password.strip() if password else "faculty"
+        q1_clean = sec_q1.strip() if sec_q1 and sec_q1.strip() else "What is your primary academic department?"
+        a1_clean = sec_a1.strip() if sec_a1 and sec_a1.strip() else dept_clean
+        q2_clean = sec_q2.strip() if sec_q2 and sec_q2.strip() else "What is your university security code?"
+        a2_clean = sec_a2.strip() if sec_a2 and sec_a2.strip() else "2026"
 
         with self.get_connection() as conn:
             cur = conn.cursor()
@@ -1468,12 +1611,53 @@ class ProductionDatabase:
 
             cur.execute("""
                 INSERT OR REPLACE INTO users (user_id, name, role, password, department, sec_q1, sec_a1, sec_q2, sec_a2)
-                VALUES (?, ?, 'faculty', ?, ?, 'What is your primary academic department?', ?, 'What is your university security code?', '2026');
-            """, (emp_id, name_clean, pwd_clean, dept_clean, dept_clean))
+                VALUES (?, ?, 'faculty', ?, ?, ?, ?, ?, ?);
+            """, (emp_id, name_clean, pwd_clean, dept_clean, q1_clean, a1_clean, q2_clean, a2_clean))
             conn.commit()
 
         self.log_audit(actor, "ADD_FACULTY", "instructors", emp_id, after=f"Added {name_clean} ({emp_id}) - {role_clean}")
         return True, f"Faculty member '{name_clean}' ({emp_id}) created successfully."
+
+    def update_faculty_security(self, employee_id: str, sec_q1: str, sec_a1: str, sec_q2: str, sec_a2: str, actor: str = "HOD") -> Tuple[bool, str]:
+        """Update faculty security questions and answers for password recovery."""
+        emp_id = employee_id.strip().upper()
+        q1 = sec_q1.strip()
+        a1 = sec_a1.strip()
+        q2 = sec_q2.strip()
+        a2 = sec_a2.strip()
+
+        if not emp_id:
+            return False, "Faculty Employee ID is required."
+        if not q1 or not a1 or not q2 or not a2:
+            return False, "Both security questions and their answers must be provided."
+
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            # Check if user exists in users table
+            cur.execute("SELECT user_id FROM users WHERE LOWER(user_id) = LOWER(?);", (emp_id,))
+            user_row = cur.fetchone()
+
+            if user_row:
+                cur.execute("""
+                    UPDATE users
+                    SET sec_q1 = ?, sec_a1 = ?, sec_q2 = ?, sec_a2 = ?
+                    WHERE LOWER(user_id) = LOWER(?);
+                """, (q1, a1, q2, a2, emp_id))
+            else:
+                # Fallback: check instructors table and create user entry
+                cur.execute("SELECT name, department FROM instructors WHERE LOWER(employee_id) = LOWER(?);", (emp_id,))
+                inst_row = cur.fetchone()
+                if not inst_row:
+                    return False, f"Faculty member '{emp_id}' not found."
+                cur.execute("""
+                    INSERT INTO users (user_id, name, role, password, department, sec_q1, sec_a1, sec_q2, sec_a2)
+                    VALUES (?, ?, 'faculty', 'faculty', ?, ?, ?, ?, ?);
+                """, (emp_id, inst_row["name"], inst_row["department"], q1, a1, q2, a2))
+
+            conn.commit()
+
+        self.log_audit(actor, "UPDATE_FACULTY_SECURITY", "users", emp_id, after=f"Updated security Q&A for {emp_id}")
+        return True, f"Security question and answer updated for faculty {emp_id}."
 
     # ================= HOD: Subject Management =================
     def get_all_subjects(self) -> List[Dict[str, Any]]:
@@ -1486,19 +1670,21 @@ class ProductionDatabase:
             """)
             return [dict(r) for r in cur.fetchall()]
 
-    def add_subject(self, code: str, name: str, department: str, credits: int, faculty_id: str, room: str) -> Tuple[bool, str]:
-        faculty_name = "Assigned Faculty"
+    def add_subject(self, code: str, name: str, department: str, credits: int, faculty_id: Optional[str] = None, room: str = "Block B, Lab 3") -> Tuple[bool, str]:
+        faculty_name = "Unassigned"
+        clean_fac_id = faculty_id.strip() if faculty_id and faculty_id.strip() else None
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("SELECT name FROM instructors WHERE employee_id = ?;", (faculty_id,))
-            fac_row = cur.fetchone()
-            if fac_row:
-                faculty_name = fac_row["name"]
+            if clean_fac_id:
+                cur.execute("SELECT name FROM instructors WHERE employee_id = ?;", (clean_fac_id,))
+                fac_row = cur.fetchone()
+                if fac_row:
+                    faculty_name = fac_row["name"]
 
             cur.execute("""
                 INSERT OR REPLACE INTO department_subjects (code, name, department, credits, assigned_faculty_id, assigned_faculty_name, room)
                 VALUES (?, ?, ?, ?, ?, ?, ?);
-            """, (code.strip().upper(), name.strip(), department.strip(), credits, faculty_id, faculty_name, room.strip()))
+            """, (code.strip().upper(), name.strip(), department.strip(), credits, clean_fac_id, faculty_name, room.strip() if room else "Block B, Lab 3"))
             
             cur.execute("""
                 INSERT OR REPLACE INTO courses (code, name, department, credits)
@@ -1506,8 +1692,8 @@ class ProductionDatabase:
             """, (code.strip().upper(), name.strip(), department.strip(), credits))
             conn.commit()
 
-        self.log_audit("HOD", "ADD_SUBJECT", "department_subjects", code, after=f"{name} assigned to {faculty_name}")
-        return True, f"Subject '{name}' ({code}) saved and assigned to {faculty_name} in {room}."
+        self.log_audit("HOD", "ADD_SUBJECT", "department_subjects", code, after=f"Subject {name} ({code}) added")
+        return True, f"Subject '{name}' ({code}) saved successfully."
 
     # ================= HOD: Class Sections Management =================
     def get_all_classes(self) -> List[Dict[str, Any]]:
@@ -1621,25 +1807,174 @@ class ProductionDatabase:
                 att = attended
                 tot = total
             else:
-                cur.execute("SELECT attended, total FROM student_subject_attendance WHERE student_id = ? AND subject_code = ?;", (student_id, subject_code))
+                cur.execute("SELECT attended, total FROM student_subject_attendance WHERE student_id = ? AND UPPER(subject_code) = UPPER(?);", (student_id, subject_code))
                 rec = cur.fetchone()
                 if rec:
                     att = rec["attended"] + (1 if status.lower() == "present" else 0)
                     tot = rec["total"] + 1
                 else:
-                    att = 25 if status.lower() == "present" else 24
-                    tot = 28
+                    att = 1 if status.lower() == "present" else 0
+                    tot = 1
 
-            pct = round((att * 100.0) / tot, 1)
+            pct = round((att * 100.0) / tot, 1) if tot > 0 else 0.0
             cur.execute("""
                 INSERT OR REPLACE INTO student_subject_attendance (
                     student_id, subject_code, subject_name, attended, total, percentage, last_status, last_marked_at, override_by, remarks
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, (student_id, subject_code, s_name, att, tot, pct, status, now_str, actor, remarks))
+            """, (student_id, subject_code.strip().upper(), s_name, att, tot, pct, status, now_str, actor, remarks))
             conn.commit()
 
         self.log_audit(actor, "MANUAL_ATTENDANCE_OVERRIDE", "student_subject_attendance", f"{student_id}:{subject_code}", after=f"Status set to {status}, Attended: {att}/{tot}")
         return True, f"Attendance for student {student_id} in {s_name} updated to {status} ({att}/{tot}) by {actor}."
+
+    def get_subject_attendance_records(self, subject_code: str, class_code: Optional[str] = None) -> Dict[str, Any]:
+        """Returns student-wise attendance records and sessions for a subject, filtered by class section."""
+        clean_code = (subject_code or "AGCS2102").strip().upper()
+        clean_class = (class_code or "all").strip()
+
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            # 1. Subject info
+            cur.execute("""
+                SELECT code, name, department, credits, assigned_faculty_name, room
+                FROM department_subjects
+                WHERE UPPER(code) = ?;
+            """, (clean_code,))
+            sub_row = cur.fetchone()
+            if not sub_row:
+                cur.execute("SELECT code, name, department, credits FROM courses WHERE UPPER(code) = ?;", (clean_code,))
+                c_row = cur.fetchone()
+                if c_row:
+                    sub_info = {
+                        "code": c_row["code"],
+                        "name": c_row["name"],
+                        "department": c_row["department"],
+                        "credits": c_row["credits"],
+                        "assigned_faculty_name": "Department Faculty",
+                        "room": "Block B, Room 204"
+                    }
+                else:
+                    sub_info = {
+                        "code": clean_code,
+                        "name": "Data Science",
+                        "department": "Computer Science",
+                        "credits": 4,
+                        "assigned_faculty_name": "Department Faculty",
+                        "room": "Block B, Room 204"
+                    }
+            else:
+                sub_info = dict(sub_row)
+
+            # 2. Students in selected class
+            if clean_class and clean_class.lower() != "all":
+                cur.execute("""
+                    SELECT id, student_id, roll_no, name, department, division, email
+                    FROM students
+                    WHERE UPPER(division) = UPPER(?) AND status != 'opted_out'
+                    ORDER BY student_id ASC;
+                """, (clean_class,))
+            else:
+                cur.execute("""
+                    SELECT id, student_id, roll_no, name, department, division, email
+                    FROM students
+                    WHERE status != 'opted_out'
+                    ORDER BY student_id ASC;
+                """)
+            student_rows = [dict(r) for r in cur.fetchall()]
+
+            # 3. For each student, get attendance in this subject
+            student_records = []
+            for st in student_rows:
+                sid = st["student_id"]
+                cur.execute("""
+                    SELECT attended, total, percentage, last_status, last_marked_at, remarks
+                    FROM student_subject_attendance
+                    WHERE student_id = ? AND UPPER(subject_code) = ?;
+                """, (sid, clean_code))
+                sa = cur.fetchone()
+                if sa:
+                    att = sa["attended"]
+                    tot = sa["total"]
+                    pct = sa["percentage"]
+                    last_status = sa["last_status"] or "Present"
+                    last_at = sa["last_marked_at"] or "—"
+                else:
+                    att = 0
+                    tot = 0
+                    pct = 0.0
+                    last_status = "No records"
+                    last_at = "—"
+
+                elig = "Eligible" if pct >= 75.0 and tot > 0 else ("Shortage" if tot > 0 else "Pending")
+
+                student_records.append({
+                    "id": st["id"],
+                    "student_id": sid,
+                    "roll_no": st["roll_no"] or sid,
+                    "name": st["name"],
+                    "department": st["department"],
+                    "division": st["division"] or "CSE 3",
+                    "attended": att,
+                    "total": tot,
+                    "percentage": pct,
+                    "last_status": last_status,
+                    "last_marked_at": last_at,
+                    "eligibility": elig
+                })
+
+            # 4. Submitted sessions for this subject
+            cur.execute("""
+                SELECT s.id as session_id, s.start_time, s.end_time, s.instructor, s.section_code,
+                       (SELECT COUNT(*) FROM attendance_records ar WHERE ar.session_id = s.id AND ar.status IN ('present', 'late')) as present_count,
+                       (SELECT COUNT(*) FROM attendance_records ar WHERE ar.session_id = s.id AND ar.status = 'absent') as absent_count
+                FROM sessions s
+                LEFT JOIN sections sec ON s.section_id = sec.id
+                LEFT JOIN courses c ON sec.course_id = c.id
+                WHERE (UPPER(s.subject_code) = ? OR UPPER(c.code) = ?) AND s.state = 'submitted'
+                ORDER BY s.id DESC LIMIT 15;
+            """, (clean_code, clean_code))
+            session_rows = [dict(r) for r in cur.fetchall()]
+
+            # Format sessions
+            formatted_sessions = []
+            for sess in session_rows:
+                dt_str = sess.get("start_time") or ""
+                parts = dt_str.split(" ")
+                date_part = parts[0] if parts else "2026-10-27"
+                time_part = parts[1] if len(parts) > 1 else dt_str
+                formatted_sessions.append({
+                    "session_id": sess["session_id"],
+                    "date": date_part,
+                    "time": time_part,
+                    "section": sess.get("section_code") or "CSE 3",
+                    "present_count": sess["present_count"] or 0,
+                    "absent_count": sess["absent_count"] or 0,
+                    "instructor": sess.get("instructor") or sub_info.get("assigned_faculty_name") or "Faculty"
+                })
+
+            # 5. Summary metrics
+            total_students = len(student_records)
+            max_conducted = max([st["total"] for st in student_records] + [len(formatted_sessions)] + [0])
+            sum_pct = sum(st["percentage"] for st in student_records)
+            avg_attendance = round(sum_pct / total_students, 1) if total_students > 0 else 0.0
+            eligible_count = sum(1 for st in student_records if st["eligibility"] == "Eligible")
+            shortage_count = sum(1 for st in student_records if st["eligibility"] == "Shortage")
+            pending_count = sum(1 for st in student_records if st["eligibility"] == "Pending")
+
+            return {
+                "success": True,
+                "subject": sub_info,
+                "summary": {
+                    "total_students": total_students,
+                    "total_classes": max_conducted,
+                    "average_attendance": avg_attendance,
+                    "eligible_count": eligible_count,
+                    "shortage_count": shortage_count,
+                    "pending_count": pending_count
+                },
+                "students": student_records,
+                "sessions": formatted_sessions
+            }
 
     # ================= HOD: Resource Deletion & Deregistration =================
     def delete_student(self, student_id: str, actor: str = "HOD") -> Tuple[bool, str]:
