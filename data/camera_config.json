@@ -1,10 +1,10 @@
 {
   "source_type": "ip_camera",
-  "ip": "https://192.0.0.8",
+  "ip": "https://10.168.109.1",
   "port": 4444,
   "path": "/video/mjpeg",
-  "custom_url": "https://192.0.0.8:4444/video/mjpeg",
+  "custom_url": "https://10.168.109.1:4444/video/mjpeg",
   "auto_reconnect": true,
-  "last_tested": "2026-10-25 19:04:27",
-  "last_status": "Connected via HTTPS (/video/mjpeg)! Resolution: 720x960"
+  "last_tested": "2026-10-27 23:15:41",
+  "last_status": ""
 }
